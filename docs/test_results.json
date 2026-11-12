@@ -1,0 +1,25 @@
+{
+  "version": "v0.4_chat_first",
+  "date_utc": "2026-11-12T04:08:15.564628+00:00",
+  "execution_environment": "Linux Python 3.13.5 (not user Windows Python 3.12)",
+  "tests": 31,
+  "failures": 0,
+  "errors": 0,
+  "result": "PASS",
+  "coverage": [
+    "Single-process DEMO, no FastAPI server",
+    "LangChain tool-call routing using a fake LLM",
+    "Conversation context and KRW amount parsing",
+    "Static ZIP inspection and public listing metadata review",
+    "Proposal draft -> human approval -> demo send",
+    "Human-confirmed report publishing and handover",
+    "Role isolation, live writes blocked",
+    "Credential prefix filtering"
+  ],
+  "not_verified": [
+    "Windows Python 3.12 + Streamlit 1.67 GUI",
+    "Paid OpenAI API interaction",
+    "Real Replit platform authentication"
+  ],
+  "notes": "No real OpenAI API calls or Replit writes are made in these tests."
+}

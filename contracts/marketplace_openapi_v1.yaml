@@ -1,0 +1,2292 @@
+openapi: 3.1.0
+info:
+  title: Micro Asset Marketplace ↔ AI Agent Contract
+  version: 1.0.0
+  description: 초소형 디지털 자산 거래소/국비 AI 에이전트 공통 설계 API. 실제 구현이 아니라 계약 초안. 실제 결제·권리 자동 이전은 불가하며 DEMO 분리 필수.
+servers:
+- url: http://localhost:8000
+  description: 로컬 Mock/개발 환경만 사용
+- url: https://{host}
+  variables:
+    host:
+      default: localhost:8000
+      description: 배포 환경별 수동 설정. 실제 키와 URL 하드코딩 금지
+security:
+- bearerAuth: []
+tags:
+- name: Auth
+- name: Listings
+- name: Preferences
+- name: Assets
+- name: Offers
+- name: Transactions
+- name: Inspections
+- name: AgentActions
+- name: System
+paths:
+  /health:
+    get:
+      tags:
+      - System
+      summary: 상태 및 API 버전 조회
+      operationId: get_health
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      security: []
+  /api/v1/auth/register:
+    post:
+      tags:
+      - Auth
+      summary: 회원가입
+      operationId: post_auth_register
+      responses:
+        '201':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRegister'
+      security: []
+  /api/v1/auth/login:
+    post:
+      tags:
+      - Auth
+      summary: 로그인 및 단기 토큰 발급
+      operationId: post_auth_login
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthToken'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthLogin'
+      security: []
+  /api/v1/auth/me:
+    get:
+      tags:
+      - Auth
+      summary: 본인 프로필
+      operationId: get_auth_me
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/listings:
+    get:
+      tags:
+      - Listings
+      summary: '공개 매물 탐색: DEMO 필터링'
+      operationId: get_listings
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListingPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      description: 'PUBLIC: ACTIVE non-demo만 반환. DEMO 환경 전용 토큰일 때 DEMO 매물 허용. 비공개 아카이브 제외.'
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: category
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: &id002
+          - web_app
+          - saas
+          - desktop_tool
+          - ai_agent
+          - mobile_app
+          - game
+          - module
+          - content_asset
+          - revenue_site
+      - name: lifecycle_status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: &id003
+          - UNLAUNCHED
+          - IN_DEVELOPMENT
+          - DISCONTINUED
+          - FAILED_COMMERCIALIZATION
+          - OPERATING_NO_REVENUE
+          - OPERATING_REVENUE
+          - ASSET_ONLY
+      - name: min_price_krw
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+      - name: max_price_krw
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      security: []
+    post:
+      tags:
+      - Listings
+      summary: 매물 초안 생성
+      operationId: post_listings
+      responses:
+        '201':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListingCreate'
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        description: 재시도 시 같은 값. 값이 같으면 작업 중복 방지.
+        required: true
+        schema:
+          type: string
+          maxLength: 128
+  /api/v1/listings/{listing_id}:
+    get:
+      tags:
+      - Listings
+      summary: 매물 상세 조회
+      operationId: get_listing_detail
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      parameters:
+      - name: listing_id
+        in: path
+        required: true
+        schema: &id001
+          type: string
+          format: uuid
+      security: []
+    patch:
+      tags:
+      - Listings
+      summary: 판매자 매물 변경·게시 상태 이동
+      operationId: patch_listing_patch
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListingPatch'
+      parameters:
+      - name: listing_id
+        in: path
+        required: true
+        schema: *id001
+  /api/v1/buyer-preferences/me:
+    get:
+      tags:
+      - Preferences
+      summary: 내 매수 성향 조회
+      operationId: get_preferences
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuyerPreferences'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    put:
+      tags:
+      - Preferences
+      summary: 내 매수 성향 저장
+      operationId: put_preferences
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuyerPreferences'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BuyerPreferences'
+  /api/v1/listings/{listing_id}/asset-upload-intents:
+    post:
+      tags:
+      - Assets
+      summary: 사설 저장소의 단기 업로드 의도 생성
+      operationId: post_asset_upload
+      responses:
+        '201':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetUploadIntent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      description: 판매자만 가능. 서버가 검증/격리 가능한 저장소 링크만 발행. 업로드 완료 후 악성코드 검사가 필요.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssetUploadIntentCreate'
+      parameters:
+      - name: listing_id
+        in: path
+        required: true
+        schema: *id001
+      - in: header
+        name: Idempotency-Key
+        description: 재시도 시 같은 값. 값이 같으면 작업 중복 방지.
+        required: true
+        schema:
+          type: string
+          maxLength: 128
+  /api/v1/assets/{asset_id}/download-intents:
+    post:
+      tags:
+      - Assets
+      summary: 소유권·동의 확인 후 만료형 다운로드 URL 발행
+      operationId: post_asset_download_intent
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetDownloadIntent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      description: PUBLIC_PREVIEW 외의 원본은 권한, 판매자 동의, inspect grant 또는 인계 자격 확인. 기본 접근 거부. URL 짧은 만료와 감사 추적 필수.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssetDownloadIntentCreate'
+      parameters:
+      - name: asset_id
+        in: path
+        required: true
+        schema: *id001
+      - in: header
+        name: Idempotency-Key
+        description: 재시도 시 같은 값. 값이 같으면 작업 중복 방지.
+        required: true
+        schema:
+          type: string
+          maxLength: 128
+  /api/v1/listings/{listing_id}/assets:
+    get:
+      tags:
+      - Assets
+      summary: 권한 있는 파일 메타데이터 열람
+      operationId: get_listing_assets
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      description: 초기 계약은 메타데이터 단건 응답 예시이며 구현 시 AssetPage 목록으로 변경할 경우 minor version 협의. 비공개 원본 다운로드 링크 반환 금지.
+      parameters:
+      - name: listing_id
+        in: path
+        required: true
+        schema: *id001
+  /api/v1/favorites:
+    get:
+      tags:
+      - Preferences
+      summary: 본인 찜 매물 목록
+      operationId: get_favorites
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListingPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags:
+      - Preferences
+      summary: 매물 찜 추가
+      operationId: post_favorite_add
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FavoriteCreate'
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        description: 재시도 시 같은 값. 값이 같으면 작업 중복 방지.
+        required: true
+        schema:
+          type: string
+          maxLength: 128
+  /api/v1/favorites/{listing_id}:
+    delete:
+      tags:
+      - Preferences
+      summary: 매물 찜 해제
+      operationId: delete_favorite_remove
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      parameters:
+      - name: listing_id
+        in: path
+        required: true
+        schema: *id001
+  /api/v1/offers:
+    post:
+      tags:
+      - Offers
+      summary: 매수자 가격·조건 제안
+      operationId: post_offers
+      responses:
+        '201':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Offer'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      description: Agent 실행은 승인된 action_id 경유 필요. 이 직접 경로는 본인 사용자의 세션에 한정.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfferCreate'
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        description: 재시도 시 같은 값. 값이 같으면 작업 중복 방지.
+        required: true
+        schema:
+          type: string
+          maxLength: 128
+    get:
+      tags:
+      - Offers
+      summary: 본인이 참여한 제안 목록
+      operationId: get_offers_list
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      parameters:
+      - name: listing_id
+        in: query
+        required: false
+        schema: *id001
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+  /api/v1/offers/{offer_id}:
+    get:
+      tags:
+      - Offers
+      summary: 당사자의 제안 조회
+      operationId: get_offer
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Offer'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      parameters:
+      - name: offer_id
+        in: path
+        required: true
+        schema: *id001
+  /api/v1/offers/{offer_id}/counter:
+    post:
+      tags:
+      - Offers
+      summary: 당사자의 역제안 생성
+      operationId: post_offer_counter
+      responses:
+        '201':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Offer'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfferCounter'
+      parameters:
+      - name: offer_id
+        in: path
+        required: true
+        schema: *id001
+      - in: header
+        name: Idempotency-Key
+        description: 재시도 시 같은 값. 값이 같으면 작업 중복 방지.
+        required: true
+        schema:
+          type: string
+          maxLength: 128
+  /api/v1/offers/{offer_id}/accept:
+    post:
+      tags:
+      - Offers
+      summary: 제안 수락 및 DEMO 거래 생성
+      operationId: post_offer_accept
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      description: 수락은 오직 제안 수신자만, version 확인, 하나의 exclusive listing에 하나의 거래. 실대금/법적 양도 아님.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VersionCheck'
+      parameters:
+      - name: offer_id
+        in: path
+        required: true
+        schema: *id001
+      - in: header
+        name: Idempotency-Key
+        description: 재시도 시 같은 값. 값이 같으면 작업 중복 방지.
+        required: true
+        schema:
+          type: string
+          maxLength: 128
+  /api/v1/offers/{offer_id}/withdraw:
+    post:
+      tags:
+      - Offers
+      summary: 발신자가 진행 중인 제안 철회
+      operationId: post_offer_withdraw
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Offer'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VersionCheck'
+      parameters:
+      - name: offer_id
+        in: path
+        required: true
+        schema: *id001
+      - in: header
+        name: Idempotency-Key
+        description: 재시도 시 같은 값. 값이 같으면 작업 중복 방지.
+        required: true
+        schema:
+          type: string
+          maxLength: 128
+  /api/v1/offers/{offer_id}/decline:
+    post:
+      tags:
+      - Offers
+      summary: 제안 거절
+      operationId: post_offer_decline
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Offer'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VersionCheck'
+      parameters:
+      - name: offer_id
+        in: path
+        required: true
+        schema: *id001
+      - in: header
+        name: Idempotency-Key
+        description: 재시도 시 같은 값. 값이 같으면 작업 중복 방지.
+        required: true
+        schema:
+          type: string
+          maxLength: 128
+  /api/v1/transactions/{transaction_id}:
+    get:
+      tags:
+      - Transactions
+      summary: 거래 정보 조회
+      operationId: get_transaction
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      parameters:
+      - name: transaction_id
+        in: path
+        required: true
+        schema: *id001
+  /api/v1/transactions/{transaction_id}/transition:
+    post:
+      tags:
+      - Transactions
+      summary: 당사자 승인과 조건 검증에 따라 DEMO 상태 이동
+      operationId: post_transaction_transition
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      description: 실대금 지불 또는 소유권 이전 처리 아님. 이행 확인 권한은 사람 본인에만 있음.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionTransition'
+      parameters:
+      - name: transaction_id
+        in: path
+        required: true
+        schema: *id001
+      - in: header
+        name: Idempotency-Key
+        description: 재시도 시 같은 값. 값이 같으면 작업 중복 방지.
+        required: true
+        schema:
+          type: string
+          maxLength: 128
+  /api/v1/transactions/{transaction_id}/handover-checks/{check_id}:
+    patch:
+      tags:
+      - Transactions
+      summary: 인계 항목 상태 변경
+      operationId: patch_handover_check_update
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverCheck'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      description: 행위자별 제출/AI확인/구매자확인을 독립 검증 후 상태 변경.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HandoverCheckUpdate'
+      parameters:
+      - name: transaction_id
+        in: path
+        required: true
+        schema: *id001
+      - name: check_id
+        in: path
+        required: true
+        schema: *id001
+  /api/v1/transactions/{transaction_id}/handover-checks:
+    get:
+      tags:
+      - Transactions
+      summary: 인수인계 체크리스트 조회
+      operationId: get_handover_checks
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverCheckPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      description: 체크리스트 배열과 페이지네이션을 반환한다.
+      parameters:
+      - name: transaction_id
+        in: path
+        required: true
+        schema: *id001
+    post:
+      tags:
+      - Transactions
+      summary: 인계 체크 결과 추가
+      operationId: post_handover_check
+      responses:
+        '201':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverCheck'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      description: seller_submitted/agent_checked/buyer_confirmed 각 인증 주체만 자신의 상태 업데이트.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HandoverCheckCreate'
+      parameters:
+      - name: transaction_id
+        in: path
+        required: true
+        schema: *id001
+      - in: header
+        name: Idempotency-Key
+        description: 재시도 시 같은 값. 값이 같으면 작업 중복 방지.
+        required: true
+        schema:
+          type: string
+          maxLength: 128
+  /api/v1/listings/{listing_id}/inspection-reports:
+    get:
+      tags:
+      - Inspections
+      summary: 검증 리포트 조회
+      operationId: get_inspection_reports
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InspectionReportPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      description: 리포트 배열과 페이지네이션을 반환한다.
+      parameters:
+      - name: listing_id
+        in: path
+        required: true
+        schema: *id001
+    post:
+      tags:
+      - Inspections
+      summary: 에이전트/검토자 검증 리포트 기록
+      operationId: post_inspection_report
+      responses:
+        '201':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InspectionReport'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      description: 검사 증거를 저장할 수 있지만 검증완료 인증 자동부여 금지.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InspectionReportCreate'
+      parameters:
+      - name: listing_id
+        in: path
+        required: true
+        schema: *id001
+      - in: header
+        name: Idempotency-Key
+        description: 재시도 시 같은 값. 값이 같으면 작업 중복 방지.
+        required: true
+        schema:
+          type: string
+          maxLength: 128
+  /api/v1/agent-actions:
+    post:
+      tags:
+      - AgentActions
+      summary: 승인 대기 에이전트 제안 등록
+      operationId: post_agent_actions
+      responses:
+        '201':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentAction'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      description: 사용자 위임과 업무 scope 확인. 초기에는 상태 PENDING_APPROVAL.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentActionCreate'
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        description: 재시도 시 같은 값. 값이 같으면 작업 중복 방지.
+        required: true
+        schema:
+          type: string
+          maxLength: 128
+  /api/v1/agent-actions/{action_id}:
+    get:
+      tags:
+      - AgentActions
+      summary: 에이전트 승인 요청 상태 조회
+      operationId: get_agent_action
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentAction'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      parameters:
+      - name: action_id
+        in: path
+        required: true
+        schema: *id001
+  /api/v1/agent-actions/{action_id}/approve:
+    post:
+      tags:
+      - AgentActions
+      summary: 실제 당사자가 정확한 내용 승인
+      operationId: post_agent_action_approve
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentAction'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      description: 승인 당사자 본인만 가능; Agent service 토큰이 대신 승인할 수 없음.
+      parameters:
+      - name: action_id
+        in: path
+        required: true
+        schema: *id001
+      - in: header
+        name: Idempotency-Key
+        description: 재시도 시 같은 값. 값이 같으면 작업 중복 방지.
+        required: true
+        schema:
+          type: string
+          maxLength: 128
+  /api/v1/agent-actions/{action_id}/reject:
+    post:
+      tags:
+      - AgentActions
+      summary: 당사자의 제안 거절
+      operationId: post_agent_action_reject
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentAction'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      parameters:
+      - name: action_id
+        in: path
+        required: true
+        schema: *id001
+      - in: header
+        name: Idempotency-Key
+        description: 재시도 시 같은 값. 값이 같으면 작업 중복 방지.
+        required: true
+        schema:
+          type: string
+          maxLength: 128
+  /api/v1/agent-actions/{action_id}/execute:
+    post:
+      tags:
+      - AgentActions
+      summary: 이미 승인된 정확한 액션 1회 실행
+      operationId: post_agent_action_execute
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentAction'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      description: payload_sha256 검증·승인 유효기간·권한 재검증, DB 트랜잭션. 실제 계약/자금 이동 불가.
+      parameters:
+      - name: action_id
+        in: path
+        required: true
+        schema: *id001
+      - in: header
+        name: Idempotency-Key
+        description: 재시도 시 같은 값. 값이 같으면 작업 중복 방지.
+        required: true
+        schema:
+          type: string
+          maxLength: 128
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 웹 세션과 별도로 범위·만료가 있는 위임 토큰. MVP는 테스트 전용.
+  schemas:
+    User:
+      type: object
+      properties:
+        id: *id001
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum:
+          - USER
+          - ADMIN
+        email_verified:
+          type: boolean
+      required:
+      - id
+      - email
+      - role
+      - email_verified
+    AuthRegister:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 12
+          maxLength: 128
+      required:
+      - email
+      - password
+    AuthLogin:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required:
+      - email
+      - password
+    AuthToken:
+      type: object
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          enum:
+          - bearer
+        expires_at:
+          type: string
+          format: date-time
+        scopes:
+          type: array
+          items:
+            type: string
+            enum:
+            - listing:read
+            - listing:inspect
+            - inspection:write
+            - buyer_profile:read
+            - offer:draft
+            - offer:execute
+            - handover:report
+      required:
+      - access_token
+      - token_type
+      - expires_at
+      - scopes
+    ListingCore:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 2
+          maxLength: 120
+        description:
+          type: string
+          minLength: 30
+          maxLength: 20000
+        category:
+          type: string
+          enum: *id002
+        lifecycle_status:
+          type: string
+          enum: *id003
+        sale_rights_type:
+          type: string
+          enum: &id005
+          - FULL_IP_ASSIGNMENT
+          - EXCLUSIVE_LICENSE
+          - NON_EXCLUSIVE_LICENSE
+          - ASSET_TRANSFER_ONLY
+          - BUSINESS_TRANSFER_REVIEW_REQUIRED
+        price_krw: &id004
+          type: integer
+          minimum: 1
+          description: 원화 정수. 금액의 소수점/부동소수점 금지
+        tech_stack:
+          type: array
+          items:
+            type: string
+            maxLength: 60
+        included_assets:
+          type: array
+          items:
+            type: string
+        excluded_assets:
+          type: array
+          items:
+            type: string
+        known_defects:
+          type: array
+          items:
+            type: string
+        monthly_cost_estimate_krw:
+          type: integer
+          minimum: 0
+        handover_days_estimate:
+          type: integer
+          minimum: 0
+        seller_support_days:
+          type: integer
+          minimum: 0
+        has_revenue:
+          type: boolean
+        revenue_krw_claimed:
+          type: integer
+          minimum: 0
+        is_demo:
+          type: boolean
+          default: false
+      required:
+      - title
+      - description
+      - category
+      - lifecycle_status
+      - sale_rights_type
+      - price_krw
+      - included_assets
+      - excluded_assets
+      - known_defects
+      - is_demo
+    ListingCreate:
+      $ref: '#/components/schemas/ListingCore'
+    ListingPatch:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 2
+          maxLength: 120
+        description:
+          type: string
+          maxLength: 20000
+        price_krw: *id004
+        known_defects:
+          type: array
+          items:
+            type: string
+        monthly_cost_estimate_krw:
+          type: integer
+          minimum: 0
+        status:
+          type: string
+          enum: &id006
+          - DRAFT
+          - PENDING_REVIEW
+          - ACTIVE
+          - PAUSED
+          - RESERVED
+          - CLOSED
+          - REMOVED
+        expected_version:
+          type: integer
+          minimum: 1
+      required:
+      - expected_version
+    Listing:
+      type: object
+      properties:
+        id: *id001
+        seller_id: *id001
+        title:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+          enum: *id002
+        lifecycle_status:
+          type: string
+          enum: *id003
+        sale_rights_type:
+          type: string
+          enum: *id005
+        price_krw: *id004
+        tech_stack:
+          type: array
+          items:
+            type: string
+        included_assets:
+          type: array
+          items:
+            type: string
+        excluded_assets:
+          type: array
+          items:
+            type: string
+        known_defects:
+          type: array
+          items:
+            type: string
+        monthly_cost_estimate_krw:
+          type: integer
+          minimum: 0
+        handover_days_estimate:
+          type: integer
+          minimum: 0
+        seller_support_days:
+          type: integer
+          minimum: 0
+        has_revenue:
+          type: boolean
+        revenue_krw_claimed:
+          type: integer
+          minimum: 0
+        status:
+          type: string
+          enum: *id006
+        verification_status:
+          type: string
+          enum:
+          - UNVERIFIED
+          - STATIC_CHECKED
+          - EXECUTION_CHECKED
+          - PARTIAL
+        revenue_claim_verification:
+          type: string
+          enum:
+          - NOT_PROVIDED
+          - SELLER_CLAIMED_UNVERIFIED
+          - DOCUMENT_REVIEWED
+        is_demo:
+          type: boolean
+        version:
+          type: integer
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - seller_id
+      - title
+      - category
+      - lifecycle_status
+      - sale_rights_type
+      - price_krw
+      - status
+      - verification_status
+      - is_demo
+      - version
+    ListingPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Listing'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+        total_estimate:
+          type: integer
+          minimum: 0
+      required:
+      - items
+      - next_cursor
+    BuyerPreferences:
+      type: object
+      properties:
+        max_budget_krw:
+          type: integer
+          minimum: 0
+        min_budget_krw:
+          type: integer
+          minimum: 0
+        skill_level:
+          type: string
+          enum:
+          - NONE
+          - BASIC
+          - INTERMEDIATE
+          - ADVANCED
+        objectives:
+          type: array
+          items:
+            type: string
+        preferred_tech_stack:
+          type: array
+          items:
+            type: string
+        max_monthly_cost_krw:
+          type: integer
+          minimum: 0
+        risk_tolerance:
+          type: string
+          enum:
+          - LOW
+          - MEDIUM
+          - HIGH
+      required:
+      - max_budget_krw
+      - skill_level
+      - objectives
+      - risk_tolerance
+    AssetUploadIntentCreate:
+      type: object
+      properties:
+        file_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        content_type:
+          type: string
+        byte_size:
+          type: integer
+          minimum: 1
+        sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        asset_type:
+          type: string
+          enum:
+          - SOURCE_ARCHIVE
+          - DOCUMENT
+          - SCREENSHOT
+          - DEMO_VIDEO
+          - LICENSE
+          - MANIFEST
+      required:
+      - file_name
+      - content_type
+      - byte_size
+      - sha256
+      - asset_type
+    AssetUploadIntent:
+      type: object
+      properties:
+        asset_id: *id001
+        upload_url:
+          type: string
+          format: uri
+        expires_at:
+          type: string
+          format: date-time
+        max_size_bytes:
+          type: integer
+      required:
+      - asset_id
+      - upload_url
+      - expires_at
+    AssetDownloadIntentCreate:
+      type: object
+      properties:
+        purpose:
+          type: string
+          enum:
+          - SELLER_PREVIEW
+          - APPROVED_INSPECTION
+          - BUYER_HANDOVER
+        listing_id: *id001
+        agent_job_id:
+          type: string
+          format: uuid
+      required:
+      - purpose
+      - listing_id
+    AssetDownloadIntent:
+      type: object
+      properties:
+        download_url:
+          type: string
+          format: uri
+        expires_at:
+          type: string
+          format: date-time
+        asset_id: *id001
+      required:
+      - download_url
+      - expires_at
+      - asset_id
+    FavoriteCreate:
+      type: object
+      properties:
+        listing_id: *id001
+      required:
+      - listing_id
+    TransactionTransition:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - HANDOVER_IN_PROGRESS
+          - HANDOVER_REVIEW
+          - DEMO_COMPLETED
+          - DISPUTED
+          - CANCELLED
+        expected_version:
+          type: integer
+          minimum: 1
+      required:
+      - status
+      - expected_version
+    HandoverCheckUpdate:
+      type: object
+      properties:
+        result:
+          type: string
+          enum:
+          - SELLER_SUBMITTED
+          - AGENT_CHECKED
+          - BUYER_CONFIRMED
+          - NEEDS_FIX
+          - NOT_TESTED
+        evidence_refs:
+          type: array
+          items:
+            type: string
+        remarks:
+          type: string
+          maxLength: 3000
+        expected_version:
+          type: integer
+          minimum: 1
+      required:
+      - result
+      - expected_version
+    AssetMeta:
+      type: object
+      properties:
+        id: *id001
+        listing_id: *id001
+        asset_type:
+          type: string
+        file_name:
+          type: string
+        size_bytes:
+          type: integer
+        sha256:
+          type: string
+        visibility:
+          type: string
+          enum:
+          - PUBLIC_PREVIEW
+          - PRIVATE_SELLER
+          - SHARED_WITH_APPROVED_BUYER
+        upload_status:
+          type: string
+          enum:
+          - PENDING
+          - QUARANTINED
+          - SCANNED
+          - REJECTED
+      required:
+      - id
+      - listing_id
+      - asset_type
+      - file_name
+      - visibility
+      - upload_status
+    OfferCreate:
+      type: object
+      properties:
+        listing_id: *id001
+        offered_price_krw: *id004
+        terms: &id007
+          type: object
+          properties:
+            handover_deadline_days:
+              type: integer
+              minimum: 0
+            seller_support_days:
+              type: integer
+              minimum: 0
+            repair_requests:
+              type: array
+              items:
+                type: string
+            acceptance_criteria:
+              type: array
+              items:
+                type: string
+            message:
+              type: string
+              maxLength: 4000
+        expires_at:
+          type: string
+          format: date-time
+        is_demo:
+          type: boolean
+      required:
+      - listing_id
+      - offered_price_krw
+      - terms
+      - expires_at
+      - is_demo
+    OfferCounter:
+      type: object
+      properties:
+        offered_price_krw: *id004
+        terms: *id007
+        expires_at:
+          type: string
+          format: date-time
+        expected_version:
+          type: integer
+          minimum: 1
+      required:
+      - offered_price_krw
+      - terms
+      - expires_at
+      - expected_version
+    Offer:
+      type: object
+      properties:
+        id: *id001
+        parent_offer_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        listing_id: *id001
+        buyer_id: *id001
+        seller_id: *id001
+        proposed_by: *id001
+        offered_price_krw: *id004
+        terms: *id007
+        status:
+          type: string
+          enum:
+          - PENDING
+          - ACCEPTED
+          - DECLINED
+          - WITHDRAWN
+          - EXPIRED
+          - COUNTERED
+        version:
+          type: integer
+          minimum: 1
+        is_demo:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - listing_id
+      - buyer_id
+      - seller_id
+      - offered_price_krw
+      - status
+      - is_demo
+      - version
+    OfferPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Offer'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+      required:
+      - items
+    VersionCheck:
+      type: object
+      properties:
+        expected_version:
+          type: integer
+          minimum: 1
+      required:
+      - expected_version
+    Transaction:
+      type: object
+      properties:
+        id: *id001
+        listing_id: *id001
+        accepted_offer_id: *id001
+        buyer_id: *id001
+        seller_id: *id001
+        is_demo:
+          type: boolean
+        status:
+          type: string
+          enum:
+          - AWAITING_HANDOVER
+          - HANDOVER_IN_PROGRESS
+          - HANDOVER_REVIEW
+          - DEMO_COMPLETED
+          - DISPUTED
+          - CANCELLED
+        version:
+          type: integer
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - listing_id
+      - accepted_offer_id
+      - buyer_id
+      - seller_id
+      - is_demo
+      - status
+    HandoverCheckCreate:
+      type: object
+      properties:
+        check_key:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 2000
+        result:
+          type: string
+          enum:
+          - SELLER_SUBMITTED
+          - AGENT_CHECKED
+          - BUYER_CONFIRMED
+          - NEEDS_FIX
+          - NOT_TESTED
+        evidence_refs:
+          type: array
+          items:
+            type: string
+        remarks:
+          type: string
+          maxLength: 3000
+      required:
+      - check_key
+      - result
+    HandoverCheck:
+      type: object
+      properties:
+        id: *id001
+        transaction_id: *id001
+        check_key:
+          type: string
+        description:
+          type: string
+        seller_submitted:
+          type: boolean
+        agent_checked:
+          type: boolean
+        buyer_confirmed:
+          type: boolean
+        result:
+          type: string
+        evidence_refs:
+          type: array
+          items:
+            type: string
+        updated_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - transaction_id
+      - check_key
+      - seller_submitted
+      - agent_checked
+      - buyer_confirmed
+    InspectionReportCreate:
+      type: object
+      properties:
+        report_type:
+          type: string
+          enum:
+          - STATIC
+          - EXECUTION
+          - HANDOVER
+          - LEGAL_CHECKLIST
+        verdict:
+          type: string
+          enum:
+          - NOT_TESTED
+          - UNVERIFIED
+          - PASS
+          - PARTIAL
+          - FAIL
+        findings: &id008
+          type: array
+          items:
+            type: object
+            properties:
+              finding_id:
+                type: string
+              severity:
+                type: string
+                enum:
+                - INFO
+                - LOW
+                - MEDIUM
+                - HIGH
+                - CRITICAL
+              title:
+                type: string
+              status:
+                type: string
+                enum:
+                - OBSERVED
+                - INFERRED
+                - UNKNOWN
+              evidence_refs:
+                type: array
+                items:
+                  type: string
+              recommendation:
+                type: string
+            required:
+            - finding_id
+            - severity
+            - title
+            - status
+        evidence_refs:
+          type: array
+          items:
+            type: string
+        source_version_sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        agent_job_id:
+          type: string
+          format: uuid
+      required:
+      - report_type
+      - verdict
+      - findings
+      - agent_job_id
+    InspectionReport:
+      type: object
+      properties:
+        id: *id001
+        listing_id: *id001
+        report_type:
+          type: string
+        verdict:
+          type: string
+        findings: *id008
+        reviewer_kind:
+          type: string
+          enum:
+          - AI_AGENT
+          - HUMAN
+          - THIRD_PARTY
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - listing_id
+      - report_type
+      - verdict
+      - reviewer_kind
+    AgentActionCreate:
+      type: object
+      properties:
+        action_type:
+          type: string
+          enum:
+          - SUBMIT_OFFER
+          - COUNTER_OFFER
+          - RECORD_HANDOVER_CHECK
+          - REQUEST_SELLER_FIX
+        resource_id: *id001
+        proposed_payload:
+          type: object
+          properties: {}
+        payload_sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        expires_at:
+          type: string
+          format: date-time
+      required:
+      - action_type
+      - resource_id
+      - proposed_payload
+      - payload_sha256
+      - expires_at
+    AgentAction:
+      type: object
+      properties:
+        id: *id001
+        user_id: *id001
+        action_type:
+          type: string
+        resource_id: *id001
+        proposed_payload:
+          type: object
+          properties: {}
+        payload_sha256:
+          type: string
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - PENDING_APPROVAL
+          - APPROVED
+          - REJECTED
+          - EXECUTED
+          - EXPIRED
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - user_id
+      - action_type
+      - resource_id
+      - payload_sha256
+      - status
+      - expires_at
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            request_id:
+              type: string
+            details:
+              type: object
+              properties: {}
+          required:
+          - code
+          - message
+          - request_id
+      required:
+      - error
+    Health:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - ok
+          - degraded
+        api_version:
+          type: string
+      required:
+      - status
+      - api_version
+    EmptyResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        message:
+          type: string
+      required:
+      - ok
+    AssetPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssetMeta'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+      required:
+      - items
+    HandoverCheckPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/HandoverCheck'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+      required:
+      - items
+    InspectionReportPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InspectionReport'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+      required:
+      - items
+  responses:
+    BadRequest:
+      description: 잘못된 입력
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: 인증 필요
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: 권한 없음
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: 리소스 없음/존재 비공개
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: 상태/버전 충돌
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ValidationError:
+      description: 업무 제약 위반
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

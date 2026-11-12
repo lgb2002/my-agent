@@ -1,0 +1,27 @@
+# Secrets (including potential editor autosaves)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.streamlit/secrets.toml
+specs_snapshot
+tests
+
+# Python / VS Code
+.venv/
+.venv-agent/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.vscode/
+
+# Local data and transient files
+data/
+*.sqlite3
+*.sqlite3-*
+*.log
+.DS_Store
