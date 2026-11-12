@@ -173,7 +173,7 @@ class ChatAgent:
     def _offline_reply(self, message, context):
         name, args = offline_intent(message, context)
         if name == "help":
-            intro = args.get("hint") or ("지금은 **로컬 도구 체험 모드**라서 일부 표현만 인식해요. "
+            intro = args.get("hint") or ("지금은 **로컬 도구 실행 모드**라서 일부 표현만 인식해요. "
                      "'매물 목록 보여줘', '100만원 이하 프로젝트 추천해줘', '첫 번째 매물 실사해줘'처럼 말해줘. "
                      "자유로운 자연어 툴 선택은 `.env`에서 OpenAI를 활성화하면 사용할 수 있어요.")
             return {"content": intro, "events": [], "pending": None, "mode": "offline"}

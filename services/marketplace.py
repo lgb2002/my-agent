@@ -12,7 +12,7 @@ class DemoClient:
     def __init__(self, actor_name):
         tokens = {'구매자 B': DEMO_BUYER_TOKEN, '판매자 A': DEMO_SELLER_TOKEN}
         if actor_name not in tokens:
-            raise MarketplaceError(403, '허용되지 않은 시연 사용자입니다.', 'FORBIDDEN')
+            raise MarketplaceError(403, '허용되지 않은 샌드박스 사용자입니다.', 'FORBIDDEN')
         self.authorization = 'Bearer ' + tokens[actor_name]
 
     def me(self):

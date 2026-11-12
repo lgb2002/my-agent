@@ -32,7 +32,7 @@
     {
       "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       "seller_id": "11111111-1111-4111-8111-111111111111",
-      "title": "AI 일정관리 웹앱 — 설정 누락 시연 매물",
+      "title": "AI 일정관리 웹앱 — 설정 누락 샌드박스 매물",
       "description": "FastAPI와 프런트엔드 기반의 일정관리 샘플 웹앱. 외부 AI API의 구성정보가 누락된 데모 프로젝트로 설계되어 구매 전 검사와 조건 협상을 연습할 수 있다.",
       "category": "web_app",
       "lifecycle_status": "DISCONTINUED",
@@ -69,7 +69,7 @@
       "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
       "seller_id": "11111111-1111-4111-8111-111111111111",
       "title": "파일 이름 정리 Python CLI — 사용가능성 미검증",
-      "description": "로컬 파일 이름을 규칙에 따라 바꾸는 소규모 유틸리티. 개인 학습용으로 제작하고 추가 개발을 중단한 데모 자산이다.",
+      "description": "로컬 파일 이름을 규칙에 따라 바꾸는 소규모 유틸리티. 개인용으로 제작하고 추가 개발을 중단한 데모 자산이다.",
       "category": "desktop_tool",
       "lifecycle_status": "ASSET_ONLY",
       "sale_rights_type": "NON_EXCLUSIVE_LICENSE",
@@ -99,7 +99,7 @@
     {
       "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
       "seller_id": "11111111-1111-4111-8111-111111111111",
-      "title": "미출시 AI 분석 SaaS — 고운영비 경고 시연 매물",
+      "title": "미출시 AI 분석 SaaS — 고운영비 경고 샌드박스 매물",
       "description": "AI 문서 분석용 서버 및 테스트 UI가 있는 미출시 샘플 SaaS. 외부 모델 호출로 월 비용이 높다는 가정이 포함된 데모 매물이다.",
       "category": "saas",
       "lifecycle_status": "UNLAUNCHED",
@@ -169,7 +169,7 @@
     "is_demo": true
   },
   "expected_behaviors": [
-    "모든 목록은 시연 데이터임을 표시",
+    "모든 목록은 샌드박스 데이터임을 표시",
     "저위험 구매자에게 세 번째 매물의 높은 월 운영비를 위험으로 표시",
     "첫 번째 매물의 API 누락을 근거로 판매자 보완·조건 협상 초안 제안",
     "실제 승인 없으면 offer 생성/송신 금지",

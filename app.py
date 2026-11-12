@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""국비 AI 에이전트 | Chat-first Streamlit app (one process, Python 3.12)."""
+"""디지털 자산 거래 AI 에이전트 | Chat-first Streamlit app (one process, Python 3.12)."""
 import json
 import re
 from html import escape
@@ -150,7 +150,7 @@ def confirmed(session, actor, operation):
             found = re.search(r"[0-9a-fA-F-]{36}", message)
             if found:
                 session["context"]["last_transaction_id"] = found.group(0)
-        add_turn(session, "assistant", "**사용자 확인 완료** · " + message)
+        add_turn(session, "assistant", "**요청 처리 완료** · " + message)
         st.rerun()
     except (AgentError, ValueError, KeyError) as exc:
         st.error("확인 단계 처리 실패: " + str(exc)[:350])
@@ -164,7 +164,7 @@ with st.sidebar:
                 '<div class="side-caption">DIGITAL PROJECT DESK</div>', unsafe_allow_html=True)
     st.markdown('<div class="side-section">WORKSPACE</div>', unsafe_allow_html=True)
     if AGENT_MODE == "mock":
-        actor = st.selectbox("시연 역할", ["구매자 B", "판매자 A"], label_visibility="collapsed")
+        actor = st.selectbox("샌드박스 계정", ["구매자 B", "판매자 A"], label_visibility="collapsed")
     else:
         actor = "Replit 연결 계정"
         st.caption("Replit 실플랫폼 · 조회 전용")
@@ -177,7 +177,7 @@ with st.sidebar:
     if ENABLE_OPENAI_CHAT and OPENAI_API_KEY:
         st.markdown('<div class="side-small">● OpenAI Tool Calling 활성 · 모델: {}</div>'.format(escape(OPENAI_MODEL)), unsafe_allow_html=True)
     else:
-        st.markdown('<div class="side-small">● 로컬 도구 체험 · OpenAI 비활성</div>', unsafe_allow_html=True)
+        st.markdown('<div class="side-small">● 로컬 도구 실행 · OpenAI 비활성</div>', unsafe_allow_html=True)
     st.markdown('<div class="side-small">● {} · {} 모드</div>'.format(
         "내장 DEMO" if AGENT_MODE == "mock" else "Replit HTTPS", escape(AGENT_MODE)), unsafe_allow_html=True)
     st.markdown('<div class="side-section">AVAILABLE TOOLS</div>', unsafe_allow_html=True)
@@ -209,7 +209,7 @@ with st.sidebar:
 
 # ── Main: conversation is the product. ──────────────────────────────
 online = ENABLE_OPENAI_CHAT and bool(OPENAI_API_KEY)
-status = "AI 자동 도구 선택" if online else "로컬 시연 도구"
+status = "AI 자동 도구 선택" if online else "규칙 기반 도구 실행"
 mode_title = "DEMO 데이터" if AGENT_MODE == "mock" else "플랫폼 조회 전용"
 st.markdown('''<div class="main-head">
   <div class="main-kicker">WORKSPACE / CONVERSATION 01</div>
@@ -224,7 +224,7 @@ st.markdown('''<div class="main-head">
 if AGENT_MODE != "mock":
     st.info("Replit 실플랫폼 연결은 조회만 지원해요. 인증 키 방식과 권한이 확정되기 전에는 거래 변경이 차단돼요.")
 if not online:
-    st.caption("현재는 API 비용 없는 규칙형 체험 모드예요. OpenAI를 활성화하면 대화 맥락에 맞춰 도구를 자동 선택합니다.")
+    st.caption("현재는 API 호출이 없는 규칙 기반 도구 모드예요. OpenAI를 활성화하면 대화 맥락에 맞춰 도구를 자동 선택합니다.")
 
 session = current
 pending_prompt = None

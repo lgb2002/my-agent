@@ -240,7 +240,7 @@ class ToolDispatcher:
                 tech = args.get("preferred_tech_stack", [])
                 if not isinstance(tech, list) or len(tech) > 10 or any(not isinstance(t, str) or len(t) > 40 for t in tech):
                     raise ValueError("선호 기술은 최대 10개의 이름으로 입력해줘.")
-                objective = str(args.get("objective") or "학습 및 프로젝트 인수")[:80]
+                objective = str(args.get("objective") or "프로젝트 인수 및 활용")[:80]
                 prefs = {"max_budget_krw": budget, "min_budget_krw": 0,
                          "max_monthly_cost_krw": max_cost, "skill_level": skill,
                          "risk_tolerance": risk, "objectives": [objective], "preferred_tech_stack": tech}

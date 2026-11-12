@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Micro Asset Marketplace ↔ AI Agent Contract
   version: 1.0.0
-  description: 초소형 디지털 자산 거래소/국비 AI 에이전트 공통 설계 API. 실제 구현이 아니라 계약 초안. 실제 결제·권리 자동 이전은 불가하며 DEMO 분리 필수.
+  description: 초소형 디지털 자산 거래소/디지털 자산 거래 AI 에이전트 공통 설계 API. 실제 구현이 아니라 계약 초안. 실제 결제·권리 자동 이전은 불가하며 DEMO 분리 필수.
 servers:
 - url: http://localhost:8000
   description: 로컬 Mock/개발 환경만 사용
