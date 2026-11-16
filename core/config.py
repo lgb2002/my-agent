@@ -19,11 +19,12 @@ MARKETPLACE_BASE_URL = os.environ.get('MARKETPLACE_API_URL', os.environ.get('MAR
 # Kept for backward-compatible environment parsing only. Never use this shared secret
 # for public visitors: each platform user must supply their own short-lived grant.
 MARKETPLACE_API_KEY = os.environ.get('MARKETPLACE_API_KEY', '').strip()
-MARKETPLACE_INCLUDE_DEMO = os.environ.get('MARKETPLACE_INCLUDE_DEMO', 'false').lower() in ('true', '1', 'yes')
+MARKETPLACE_INCLUDE_DEMO = os.environ.get('MARKETPLACE_INCLUDE_DEMO', 'true').lower() in ('true', '1', 'yes')
 MARKETPLACE_AUTH_SCHEME = os.environ.get('MARKETPLACE_AUTH_SCHEME', 'bearer').strip().lower()
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '').strip()
 OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-4.1-mini').strip()
 ENABLE_OPENAI_CHAT = os.environ.get('ENABLE_OPENAI_CHAT', 'false').strip().lower() in ('1','true','yes')
+SHOW_DEVELOPER_TOOLS = os.environ.get('SHOW_DEVELOPER_TOOLS', 'false').strip().lower() in ('1','true','yes')
 MAX_MODEL_CALLS_PER_JOB = 0
 MAX_COST_KRW_PER_JOB = 0
 RULE_VERSION = 'static-rules-v0.1'

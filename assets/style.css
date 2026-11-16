@@ -1,7 +1,6 @@
-/* ProjectAgain · chat-first design pass 01
-   Primary scope: empty chat state / first-run task suggestions.
-   Retain native Streamlit buttons, text input, and approval controls.
-   See DESIGN.md for validated vs provisional decisions. */
+/* ProjectAgain · focused conversational workspace
+   Native Streamlit widgets and interaction semantics stay intact.
+   See DESIGN.md for validated code behavior vs unverified cloud rendering. */
 :root {
   --bg: #FAFAF8;
   --paper: #FFFFFF;
@@ -26,7 +25,7 @@ section.main > div.block-container, [data-testid="stMainBlockContainer"] {
 }
 /* The existing wordmark is retained, not replaced with a decorative logo. */
 .brand {display:flex;align-items:center;gap:10px;font-size:20px;font-weight:760;
-  letter-spacing:-.055em;color:#263B30;margin:15px 0 3px;}
+  letter-spacing:-.055em;color:#263B30;margin:14px 0 26px;}
 .brand-symbol {display:inline-flex;width:30px;height:30px;align-items:center;justify-content:center;
   border:1px solid #C7D7C9;border-radius:8px;background:#E9F0E8;font-size:19px;color:var(--accent);}
 .brand-sub {color:#627568;font-size:12px;margin:0 0 20px 40px;letter-spacing:-.005em;}
@@ -36,6 +35,10 @@ section.main > div.block-container, [data-testid="stMainBlockContainer"] {
 .sidebar-meta {font-size:12px;color:#52685D;line-height:1.65;}
 .sidebar-meta p {font-size:12px;color:#657469;line-height:1.55;margin-top:8px;}
 [data-testid="stSidebar"] [data-testid="stExpander"]{background:transparent;border-color:#DDE5DC;}
+/* Keep account controls visually quiet until needed. Controls remain native. */
+[data-testid="stSidebar"] [data-testid="stCheckbox"] label {font-size:14px;}
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {color:#586E60;}
+[data-testid="stSidebar"] [data-testid="stExpander"] summary {font-weight:600;}
 /* Compact app chrome: title and environment do not compete with the task. */
 .workspace-bar {display:flex;align-items:center;justify-content:space-between;gap:16px;
   padding:7px 0 19px;border-bottom:1px solid var(--line);margin-bottom:0;}
@@ -99,6 +102,13 @@ section.main > div.block-container, [data-testid="stMainBlockContainer"] {
 [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] p {font-size:14px;line-height:1.75;}
 [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] li {font-size:14px;line-height:1.65;margin-bottom:4px;}
 [data-testid="stChatMessage"] [data-testid="stExpander"] {border:1px solid #E5ECE4;border-radius:9px;background:#FBFCFA;}
+/* Conversation scroll is owned by Streamlit's height-limited container.
+   Avoid styling overflow/position on Streamlit's internal scroll wrapper:
+   that is fragile across Streamlit releases and can trap old messages. */
+.st-key-chat_history_v10 {margin-top:18px;margin-bottom:12px;}
+.st-key-chat_history_v10 [data-testid="stChatMessage"]:first-of-type {margin-top:0;}
+.history-start-label {color:#5B7161;font-size:12px;font-weight:650;
+  letter-spacing:-.01em;margin:4px 0 16px;}
 /* Chat remains the primary action, including before the first message. */
 [data-testid="stChatInput"] {background:#fff;border:1px solid #CCDCD0;border-radius:12px;
   box-shadow:0 3px 12px rgba(32,57,43,.045);}

@@ -24,27 +24,24 @@ except Exception:
 from agent.chat import ChatAgent  # noqa: E402
 from agent.core import AgentError, AgentRuntime  # noqa: E402
 from agent.tools import TOOL_LABELS, perform_confirmed_action  # noqa: E402
-from core.config import AGENT_MODE, ENABLE_OPENAI_CHAT, OPENAI_API_KEY, OPENAI_MODEL, MARKETPLACE_INCLUDE_DEMO, marketplace_config_error  # noqa: E402
+from core.config import AGENT_MODE, ENABLE_OPENAI_CHAT, OPENAI_API_KEY, OPENAI_MODEL, SHOW_DEVELOPER_TOOLS, marketplace_config_error  # noqa: E402
 from core.request_context import set_request_context  # noqa: E402
 from core.llm_service import contains_obvious_secret  # noqa: E402
 from core.config import MARKETPLACE_BASE_URL  # noqa: E402
 from core.live_diagnostics import run_diagnostics  # noqa: E402
+from core.chat_sessions import conversation_scope, get_or_migrate_session, append_turn  # noqa: E402
 
 st.set_page_config(page_title="ProjectAgain · 프로젝트 에이전트", page_icon="🧭", layout="wide", initial_sidebar_state="expanded")
 st.markdown("<style>" + (ROOT / "assets" / "style.css").read_text(encoding="utf-8") + "</style>", unsafe_allow_html=True)
 
 
-def get_session(scope):
+def get_session(scope, legacy_scopes=()):
     all_sessions = st.session_state.setdefault("chat_sessions_v06", {})
-    if scope not in all_sessions:
-        all_sessions[scope] = {"turns": [], "context": {"recent_listings": []}, "pending": None}
-    return all_sessions[scope]
+    return get_or_migrate_session(all_sessions, scope, legacy_scopes)
 
 
 def add_turn(session, role, content, **kwargs):
-    session["turns"].append({"role": role, "content": content, **kwargs})
-    # Keep the UI responsive, and avoid oversized LLM-context history.
-    session["turns"] = session["turns"][-80:]
+    append_turn(session, role, content, **kwargs)
 
 
 def show_event(event, idx, turn_id):
@@ -166,111 +163,111 @@ def confirmed(session, actor, operation):
         st.error("확인 단계 처리 중 오류가 발생했어요. 상태를 다시 조회해줘.")
 
 
-# ── Sidebar: connection and utility, not a second workflow dashboard. ──
+# ── Sidebar: a short path to listings and optional account connection. ──
 visitor = st.session_state.setdefault("visitor_uuid_v06", uuid.uuid4().hex)
 with st.sidebar:
-    st.markdown('<div class="brand"><span class="brand-symbol">◈</span><span>ProjectAgain</span></div>'
-                '<div class="brand-sub">프로젝트 거래 에이전트</div>', unsafe_allow_html=True)
+    st.markdown('<div class="brand"><span class="brand-symbol">◈</span><span>ProjectAgain</span></div>',
+                unsafe_allow_html=True)
 
     if AGENT_MODE == "mock":
-        st.caption("연결 환경")
-        actor = st.selectbox("체험할 역할", ["구매자 B", "판매자 A"], label_visibility="collapsed")
+        actor = st.selectbox("체험할 역할", ["구매자 B", "판매자 A"])
         token = ""
         show_demo = True
-        st.markdown('<p class="side-hint">샌드박스 · 테스트 매물과 가상 거래만 사용</p>', unsafe_allow_html=True)
+        st.caption("샌드박스 환경")
     else:
         actor = "ProjectAgain 사용자"
-        st.caption("플랫폼 연결")
-        token = st.text_input("내 위임 토큰 (선택)", type="password", key="user_grant_v06",
-            placeholder="공개 매물 조회에는 필요 없음", help="ProjectAgain 계정에서 발급받은 단기 Bearer 위임 토큰입니다. 로그인 비밀번호나 JWT가 아닙니다.")
-        show_demo = st.checkbox("시연 매물 포함", value=MARKETPLACE_INCLUDE_DEMO, key="include_demo_v06")
-        if token:
-            st.caption("개인 데이터 조회는 토큰의 권한 범위 내에서만 가능합니다.")
-            if st.button("토큰 연결 해제", width="stretch", on_click=lambda: st.session_state.update(user_grant_v06="")):
-                pass
-        else:
-            st.caption("공개 매물만 조회 · 개인 데이터 미연결")
-        st.caption("위임 토큰은 채팅에 입력하지 마세요. 실제 거래 변경은 차단되어 있습니다.")
+        st.markdown('<div class="sidebar-heading">매물 보기</div>', unsafe_allow_html=True)
+        # First visit defaults to including demo listings, but each visitor
+        # can turn the filter off. New widget key avoids sticky old defaults.
+        show_demo = st.checkbox("시연 매물 포함", value=True, key="include_demo_v10")
+        with st.expander("내 계정 연결", expanded=False):
+            token = st.text_input(
+                "위임 토큰", type="password", key="user_grant_v06",
+                placeholder="12시간 위임 토큰",
+                help="개인 구매 조건이나 제안 내역 조회 시에만 필요합니다. 공개 매물은 토큰 없이 조회할 수 있어요.",
+            )
+            if token and st.button("연결 해제", key="disconnect_grant_v10", width="stretch"):
+                st.session_state["user_grant_v06"] = ""
+                st.rerun()
+        st.caption("계정 연결됨" if token else "공개 매물 조회 가능")
 
-    # Shared Cloud Secrets grant is intentionally not used by public visitors.
+    # Shared Cloud Secrets grant must never be attached to public visitors.
     set_request_context(token=token, visitor_id=visitor, include_demo=show_demo)
     owner_scope = hashlib.sha256(token.encode("utf-8")).hexdigest()[:12] if token else visitor
-    scope = '{}::{}::{}::{}'.format(AGENT_MODE, actor, owner_scope if AGENT_MODE == 'live' else 'demo', show_demo)
-    current = get_session(scope)
+    scope = conversation_scope(AGENT_MODE, actor, owner_scope if AGENT_MODE == 'live' else 'demo')
+    # Before v0.10, demo-filter switches created separate chat scopes.
+    old_scopes = [scope + '::' + str(show_demo), scope + '::' + str(not show_demo)]
+    current = get_session(scope, old_scopes)
+    # A search filter change must not erase the chat, but old search ordinals
+    # must not accidentally point to a listing excluded by the new filter.
+    previous_filter = current.get("_include_demo_filter")
+    if previous_filter is not None and previous_filter != show_demo:
+        for context_key in ("recent_listings", "listing_next_cursor", "last_search_query"):
+            current["context"].pop(context_key, None)
+    current["_include_demo_filter"] = show_demo
     if st.button("＋ 새 대화", type="primary", width="stretch"):
         st.session_state["chat_sessions_v06"][scope] = {"turns": [], "context": {"recent_listings": []}, "pending": None}
         st.rerun()
 
-    st.markdown('<div class="side-divider"></div><div class="sidebar-heading">도구와 설정</div>', unsafe_allow_html=True)
-    with st.expander("사용 가능한 도구", expanded=False):
-        for tool, label in TOOL_LABELS.items():
-            if AGENT_MODE == "live" and (tool.startswith("prepare_") or tool == "inspect_attached_zip"):
-                continue
-            st.caption("· " + label)
-        st.caption("상태 변경은 DEMO에서만 사용자 승인을 거쳐 진행합니다.")
-
     if AGENT_MODE == "mock" and actor == "판매자 A":
-        with st.expander("ZIP 정적 검사 파일", expanded=False):
-            uploaded = st.file_uploader("검사할 ZIP", type=["zip"], help="4MB 이하 · 파일을 실행하지 않는 정적 검사")
+        with st.expander("ZIP 검사 파일", expanded=False):
+            uploaded = st.file_uploader("검사할 ZIP", type=["zip"], help="4MB 이하 · 압축 파일을 실행하지 않고 검사합니다.")
     else:
         uploaded = None
-    with st.expander("최근 작업", expanded=False):
-        try:
-            jobs = AgentRuntime(actor).request("GET", "/api/agent/v1/jobs").get("items", [])[:5]
-            if not jobs:
-                st.caption("아직 작업 기록이 없습니다.")
-            for job in jobs:
-                st.caption("{} · {}".format(job.get("task_type", "작업"), job.get("status", "미확인")))
-        except Exception:
-            st.caption("작업 기록 연결 대기 중")
-    if current["turns"]:
-        st.download_button("대화 기록 저장", json.dumps(current["turns"], ensure_ascii=False, indent=2),
-                           file_name="projectagain_conversation.json", mime="application/json", width="stretch")
-    if AGENT_MODE == "live":
-        with st.expander("API 연결 진단", expanded=False):
-            st.caption("버튼을 누르면 공개 API를 시연 매물 제외·포함으로 각각 확인하며, 사용자별 인증을 별도 검사합니다.")
-            st.caption("실행 모드: Live · 실제 HTTPS 읽기 전용")
-            st.caption("시연 매물 포함: " + ("켜짐" if show_demo else "꺼짐"))
-            if st.button("연결 상태 검사", key="diagnose_marketplace_v08", width="stretch"):
-                config_error = marketplace_config_error()
-                if config_error:
-                    st.session_state["live_diagnostics_v08"] = {"configuration_error": config_error}
-                else:
-                    with st.spinner("실제 플랫폼 API를 확인하는 중..."):
-                        st.session_state["live_diagnostics_v08"] = run_diagnostics(
-                            MARKETPLACE_BASE_URL, token=token, include_demo=show_demo)
-            report = st.session_state.get("live_diagnostics_v08")
-            if report:
-                if "configuration_error" in report:
-                    st.error(report["configuration_error"])
-                else:
-                    for title, key in (("일반 공개 매물", "public"),
-                                       ("시연 매물 포함", "with_demo"),
-                                       ("사용자별 토큰 인증", "delegation")):
-                        entry = report[key]
-                        status = entry.get("http_status")
-                        status_label = str(status) if status is not None else "미확인"
-                        count = " · {}건".format(entry["count"]) if entry.get("count") is not None else ""
-                        st.caption("{} · HTTP {}{} · {}".format(title, status_label, count, entry["detail"]))
-                    st.info(report["interpretation"])
-                    st.caption("검사 시점의 결과입니다. 토큰·필터·API 주소 변경 후 다시 검사해 주세요.")
-    with st.expander("OpenAI 실행 상태", expanded=False):
-        st.caption(ai_activation_reason(bool(OPENAI_API_KEY), ENABLE_OPENAI_CHAT))
-        st.caption("설정상 활성화와 실제 모델 호출 성공은 다릅니다. 호출 시 API 비용이 발생할 수 있습니다.")
-        if OPENAI_API_KEY and not ENABLE_OPENAI_CHAT:
-            st.caption('Secrets에서 ENABLE_OPENAI_CHAT = "true"로 설정하고 앱을 재시작해야 합니다. 공개 이용자 사용량 제한도 필요합니다.')
-    st.markdown('<div class="side-divider"></div><div class="sidebar-meta">'
-                + ("AI 도구 호출" if ENABLE_OPENAI_CHAT and OPENAI_API_KEY else "규칙형 도구 체험")
-                + ' · ' + escape(OPENAI_MODEL if ENABLE_OPENAI_CHAT and OPENAI_API_KEY else '로컬')
-                + '<p>결제·계약·자산 이전 기능은 제공하지 않습니다.</p></div>', unsafe_allow_html=True)
+
+    # Debug tools remain available for maintainers, but ordinary visitors
+    # don't need server diagnostics, raw model metadata or admin panels.
+    if SHOW_DEVELOPER_TOOLS:
+        st.markdown('<div class="side-divider"></div><div class="sidebar-heading">운영 진단</div>', unsafe_allow_html=True)
+        with st.expander("사용 가능한 도구", expanded=False):
+            for tool, label in TOOL_LABELS.items():
+                if AGENT_MODE == "live" and (tool.startswith("prepare_") or tool == "inspect_attached_zip"):
+                    continue
+                st.caption("· " + label)
+        with st.expander("최근 작업", expanded=False):
+            try:
+                jobs = AgentRuntime(actor).request("GET", "/api/agent/v1/jobs").get("items", [])[:5]
+                if not jobs:
+                    st.caption("아직 작업 기록이 없습니다.")
+                for job in jobs:
+                    st.caption("{} · {}".format(job.get("task_type", "작업"), job.get("status", "미확인")))
+            except Exception:
+                st.caption("작업 기록 연결 대기 중")
+        if current["turns"]:
+            st.download_button("대화 기록 저장", json.dumps(current["turns"], ensure_ascii=False, indent=2),
+                               file_name="projectagain_conversation.json", mime="application/json", width="stretch")
+        if AGENT_MODE == "live":
+            with st.expander("API 연결 진단", expanded=False):
+                if st.button("연결 상태 검사", key="diagnose_marketplace_v08", width="stretch"):
+                    config_error = marketplace_config_error()
+                    if config_error:
+                        st.session_state["live_diagnostics_v08"] = {"configuration_error": config_error}
+                    else:
+                        with st.spinner("연결 상태 확인 중..."):
+                            st.session_state["live_diagnostics_v08"] = run_diagnostics(
+                                MARKETPLACE_BASE_URL, token=token, include_demo=show_demo)
+                report = st.session_state.get("live_diagnostics_v08")
+                if report:
+                    if "configuration_error" in report:
+                        st.error(report["configuration_error"])
+                    else:
+                        for title, key in (("공개 매물", "public"), ("시연 포함", "with_demo"),
+                                           ("사용자 인증", "delegation")):
+                            entry = report[key]
+                            status = entry.get("http_status")
+                            count = " · {}건".format(entry["count"]) if entry.get("count") is not None else ""
+                            st.caption("{} · HTTP {}{} · {}".format(title, status if status is not None else "미확인", count, entry["detail"]))
+                        st.info(report["interpretation"])
+        with st.expander("OpenAI 상태", expanded=False):
+            st.caption(ai_activation_reason(bool(OPENAI_API_KEY), ENABLE_OPENAI_CHAT))
+            st.caption("모델: " + (OPENAI_MODEL if ENABLE_OPENAI_CHAT and OPENAI_API_KEY else "비활성"))
 
 # ── Main: minimal conversation-first interface. ────────────────────
 online = ENABLE_OPENAI_CHAT and bool(OPENAI_API_KEY)
 connection_error = marketplace_config_error()
 mode_title = "샌드박스" if AGENT_MODE == "mock" else ("플랫폼 설정 필요" if connection_error else "플랫폼 조회 · 읽기 전용")
-model_title = "AI 도구 선택" if online else "규칙형 체험"
 st.markdown('''<div class="workspace-bar"><div class="workspace-name">프로젝트 에이전트</div>
-<div class="workspace-meta"><span class="status-dot"></span>{} <span class="meta-separator">/</span> {}</div></div>'''.format(escape(mode_title), escape(model_title)), unsafe_allow_html=True)
+<div class="workspace-meta"><span class="status-dot"></span>{}</div></div>'''.format(escape(mode_title)), unsafe_allow_html=True)
 
 session = current
 pending_prompt = None
@@ -310,17 +307,16 @@ if not session["turns"]:
 if AGENT_MODE == 'live':
     if connection_error:
         st.warning(connection_error)
-    elif not token:
-        st.caption("공개 매물을 조회할 수 있어요. 개인 구매 조건과 제안 내역은 사이드바에서 위임 토큰을 연결한 뒤 확인할 수 있습니다.")
-    else:
-        st.caption("연결된 계정의 위임 권한 내에서 조회합니다. 제안 생성·승인·전송은 차단되어 있습니다.")
-if not online and not session["turns"]:
-    st.caption(ai_activation_reason(bool(OPENAI_API_KEY), ENABLE_OPENAI_CHAT))
-
-for i, turn in enumerate(session["turns"]):
-    show_turn(turn, i)
-
-if session.get("pending"):
+# Diagnostics stay off the primary conversational surface.
+# Keep a dedicated scroll area so the first message is reachable on long chats.
+if session["turns"]:
+    with st.container(height=540, border=False, key="chat_history_v10"):
+        st.markdown('<div id="chat-history-start" class="history-start-label">대화 기록</div>', unsafe_allow_html=True)
+        for i, turn in enumerate(session["turns"]):
+            show_turn(turn, i)
+        if session.get("pending"):
+            pending_ui(session, actor)
+elif session.get("pending"):
     pending_ui(session, actor)
 
 submitted_text = st.chat_input("예: 50만원 이하 Python 프로젝트 추천해줘", max_chars=2000)
