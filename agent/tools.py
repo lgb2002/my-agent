@@ -22,7 +22,8 @@ TOOL_DEFINITIONS = [
         "type": "function", "function": {
             "name": "search_listings", "description": "거래 플랫폼의 공개 매물을 검색하거나 매물 목록을 가져옵니다. 조회 전용.",
             "parameters": {"type": "object", "properties": {
-                "query": {"type": "string", "description": "프로젝트 이름이나 검색 키워드, 없으면 빈 문자열"}}, "required": []},
+                "query": {"type": "string", "description": "프로젝트 이름이나 검색 키워드, 없으면 빈 문자열"},
+                "cursor": {"type": "integer", "description": "다음 페이지를 조회할 때 플랫폼이 반환한 정수 오프셋"}}, "required": []},
         },
     },
     {
@@ -119,6 +120,12 @@ TOOL_DEFINITIONS = [
     },
     {
         "type": "function", "function": {
+            "name": "get_buyer_preferences", "description": "연결된 사용자 계정의 구매 조건을 조회합니다. 사용자별 위임 토큰과 buyer_profile:read 권한이 필요합니다.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function", "function": {
             "name": "get_recent_jobs", "description": "현재 계정의 최근 에이전트 작업과 상태를 조회합니다.",
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
@@ -131,6 +138,7 @@ TOOL_LABELS = {
     "prepare_counter_offer": "역제안 준비", "prepare_accept_offer": "수락 검토",
     "get_handover": "인수인계 조회", "get_recent_jobs": "작업 기록 조회",
     "prepare_publish_report": "검사 보고서 제출 준비", "prepare_handover_check": "인계 기록 준비",
+    "get_buyer_preferences": "내 구매 조건",
 }
 READ_TOOLS = {"search_listings", "list_offers", "get_handover", "get_recent_jobs"}
 STAGED_TOOLS = {"prepare_offer", "prepare_counter_offer", "prepare_accept_offer"}
@@ -166,32 +174,42 @@ class ToolDispatcher:
         return self.runtime.request(method, path, payload, body, write, key)
 
     def _listing(self, value):
-        items = self.request("GET", "/api/agent/v1/listings")["items"]
+        """Resolve user-visible ordinals through the stored *UUID*, never a moving page.
+
+        A numerical choice is invalid if a previous search/recommendation has not
+        explicitly pinned that position in the current conversation session.
+        """
         text = str(value or "").strip()
         lowered = text.casefold()
-        if not items:
-            raise ValueError("조회할 수 있는 매물이 없습니다.")
-        recent = self.context.get("recent_listings") or []
-        if lowered in ("1", "first") or re.search(r"(?:첫\s*번째|1\s*번|1위)", lowered):
-            match = recent[0] if recent else items[0]
-            return next(x for x in items if x["id"] == match["id"])
-        if lowered in ("2", "second") or re.search(r"(?:두\s*번째|2\s*번|2위)", lowered):
-            source = recent or items
-            if len(source) > 1:
-                return next(x for x in items if x["id"] == source[1]["id"])
-        if lowered in ("3", "third") or re.search(r"(?:세\s*번째|3\s*번|3위)", lowered):
-            source = recent or items
-            if len(source) > 2:
-                return next(x for x in items if x["id"] == source[2]["id"])
         if not text:
-            raise ValueError("어떤 매물인지 알려줘. 예: '첫 번째 매물 실사해줘'.")
-        exact = [x for x in items if lowered in (x["id"].casefold(), x["title"].casefold())]
-        if len(exact) == 1:
-            return exact[0]
-        matches = [x for x in items if lowered in x["title"].casefold() or x["id"].casefold().startswith(lowered)]
+            raise ValueError("어떤 매물인지 알려줘. 예: '매물 검색 후 1번 실사해줘'.")
+        recent = self.context.get("recent_listings") or []
+        index = None
+        for idx, variants in enumerate((("1", "first", "첫 번째", "첫번째", "1번", "1위"),
+                                       ("2", "second", "두 번째", "두번째", "2번", "2위"),
+                                       ("3", "third", "세 번째", "세번째", "3번", "3위"))):
+            if lowered in variants or (idx < 3 and re.fullmatch(r"{}\s*번(?:\s*매물)?".format(idx + 1), lowered)):
+                index = idx
+                break
+        if index is not None:
+            if index >= len(recent):
+                raise ValueError("선택할 목록이 없어요. 먼저 매물을 검색하거나 추천받아 줘.")
+            return self.request("GET", "/api/agent/v1/listings/" + quote(recent[index]["id"], safe=""))
+        if re.fullmatch(r"[0-9a-fA-F-]{36}", text):
+            return self.request("GET", "/api/agent/v1/listings/" + quote(text, safe=""))
+        exact = [x for x in recent if str(x.get("title") or "").casefold() == lowered]
+        matches = exact or [x for x in recent if lowered in str(x.get("title") or "").casefold()]
         if len(matches) == 1:
-            return matches[0]
-        raise ValueError("매물을 하나로 지정할 수 없어요. 매물 제목이나 순번(1번, 2번)을 알려줘.")
+            return self.request("GET", "/api/agent/v1/listings/" + quote(matches[0]["id"], safe=""))
+        if len(matches) > 1:
+            raise ValueError("비슷한 매물이 여러 개야. 매물 순번 또는 UUID로 지정해줘.")
+        # Only search public listings if the current conversation has no match.
+        response = self.request("GET", "/api/agent/v1/listings?q=" + quote(text, safe=""))
+        candidates = [x for x in response.get("items", []) if isinstance(x, dict) and x.get("id")]
+        matches = [x for x in candidates if lowered == str(x.get("title") or "").casefold()]
+        if len(matches) == 1:
+            return self.request("GET", "/api/agent/v1/listings/" + quote(matches[0]["id"], safe=""))
+        raise ValueError("매물을 하나로 선택할 수 없어요. 먼저 검색 후 순번이나 정확한 UUID를 사용해줘.")
 
     def _offer(self, offer_id):
         offer_id = str(offer_id or "").strip()
@@ -219,13 +237,29 @@ class ToolDispatcher:
         try:
             if name == "search_listings":
                 q = str(args.get("query", ""))[:100].strip()
-                items = self.request("GET", "/api/agent/v1/listings?q=" + quote(q, safe=""))["items"][:15]
-                self.context["recent_listings"] = [{"id": a["id"], "title": a["title"]} for a in items]
-                data = {"listings": [{"id": x["id"], "title": x["title"], "price_krw": x["price_krw"],
-                         "category": x.get("category", ""), "tech_stack": x.get("tech_stack", []),
+                offset = int(args.get("cursor") or 0)
+                if offset < 0 or offset > 1000000:
+                    raise ValueError("조회 페이지 번호가 올바르지 않아요.")
+                page = self.request("GET", "/api/agent/v1/listings?q=" + quote(q, safe="") + "&limit=15&cursor=" + str(offset))
+                items = page.get("items", [])[:15]
+                self.context["recent_listings"] = [{"id": a["id"], "title": a.get("title") or "제목 미확인"} for a in items]
+                self.context["listing_next_cursor"] = page.get("next_cursor")
+                self.context["last_search_query"] = q
+                data = {"listings": [{"id": x["id"], "title": x.get("title") or "제목 미확인", "price_krw": x.get("price_krw"),
+                         "category": x.get("category") or "", "tech_stack": x.get("tech_stack") or [],
                          "verification_status": x.get("verification_status", "UNKNOWN"),
-                         "description": str(x.get("description", ""))[:240]} for x in items]}
-                summary = "검색 결과 {}건을 찾았어요.".format(len(items))
+                         "description": str(x.get("description") or "")[:240]} for x in items]}
+                data["next_cursor"] = page.get("next_cursor")
+                data["total_estimate"] = page.get("total_estimate")
+                summary = "매물 {}건을 표시했어요.{}".format(len(items), " 다음 페이지가 있어요." if page.get("next_cursor") else "")
+                if not items:
+                    from core.request_context import include_demo
+                    if AGENT_MODE == 'live' and not include_demo():
+                        summary = "조회 성공 · 현재 조건에 0건입니다. 시연 매물이 제외되었을 수 있어요. 사이드바의 '시연 매물 포함'을 켠 뒤 다시 조회해 주세요."
+                    elif AGENT_MODE == 'live':
+                        summary = "조회 성공 · 시연 매물 포함 조건에서도 0건입니다. ACTIVE 상태, 다른 필터 또는 플랫폼 연결 주소를 확인해 주세요."
+                    else:
+                        summary = "조회 성공 · 현재 조건에 0건입니다."
             elif name == "recommend_listings":
                 budget = int(args.get("max_budget_krw", 1000000))
                 if not 0 < budget <= 1000000000:
@@ -249,6 +283,8 @@ class ToolDispatcher:
                 self.context["last_job_id"] = job["job_id"]
                 ranked = (full.get("result") or {}).get("ranked", [])
                 self.context["recent_listings"] = [{"id": x["listing_id"], "title": x["title"]} for x in ranked]
+                self.context["listing_next_cursor"] = None
+                self.context["last_search_query"] = ""
                 data = {"job_id": job["job_id"], "ranked": ranked, "excluded": (full.get("result") or {}).get("excluded", []),
                         "criteria": prefs, "status": full["status"]}
                 summary = "조건을 적용해 {}개 후보를 추렸어요. 점수는 규칙 기반 추정이며 수익성 보증은 아니에요.".format(len(ranked))
@@ -277,9 +313,9 @@ class ToolDispatcher:
                 listing = self._listing(args.get("listing"))
                 offers = self.request("GET", "/api/agent/v1/offers?listing_id=" + quote(listing["id"]))["items"][:20]
                 self.context["last_offers"] = [x["id"] for x in offers]
-                data = {"listing_title": listing["title"], "offers": [{"id": o["id"], "price_krw": o["offered_price_krw"],
-                        "status": o["status"], "version": o["version"], "proposed_by": o["proposed_by"],
-                        "buyer_id": o["buyer_id"], "seller_id": o["seller_id"]} for o in offers]}
+                data = {"listing_title": listing["title"], "offers": [{"id": o["id"], "price_krw": o.get("offered_price_krw"),
+                        "status": o.get("status", "UNKNOWN"), "version": o.get("version"), "proposed_by": o.get("proposed_by"),
+                        "buyer_id": o.get("buyer_id"), "seller_id": o.get("seller_id")} for o in offers]}
                 summary = "{}의 협상 제안 {}건을 조회했어요.".format(listing["title"], len(offers))
             elif name == "prepare_offer":
                 if AGENT_MODE != "mock" or self.actor_name != "구매자 B":
@@ -364,6 +400,12 @@ class ToolDispatcher:
                 checks = self.request("GET", "/api/agent/v1/transactions/" + quote(txid) + "/handover-checks")
                 data = {"transaction_id": txid, "checks": checks["items"][:30]}
                 summary = "인수인계 확인 항목 {}건을 가져왔어요.".format(len(data["checks"]))
+            elif name == "get_buyer_preferences":
+                client, actor = self.runtime.authenticated()
+                if not callable(getattr(client, "buyer_preferences", None)):
+                    raise ValueError("구매 조건 조회는 실제 플랫폼 사용자 연결 후 사용할 수 있어요.")
+                data = {"buyer_preferences": client.buyer_preferences()}
+                summary = "연결된 계정의 구매 조건을 확인했어요."
             elif name == "get_recent_jobs":
                 jobs = self.request("GET", "/api/agent/v1/jobs")["items"][:12]
                 data = {"jobs": jobs}

@@ -1,63 +1,133 @@
-/* Chat-first layout — quiet editorial interface, not an imitation messaging app. */
+/* ProjectAgain · chat-first design pass 01
+   Primary scope: empty chat state / first-run task suggestions.
+   Retain native Streamlit buttons, text input, and approval controls.
+   See DESIGN.md for validated vs provisional decisions. */
 :root {
-  --canvas:#F7F6F2; --paper:#FFFFFF; --ink:#1D2926; --muted:#6F7A74;
-  --line:#E4E7E1; --accent:#AE6248; --pine:#315A50;
+  --bg: #FAFAF8;
+  --paper: #FFFFFF;
+  --ink: #202D26;
+  --muted: #596C61;
+  --soft: #5F7467;
+  --line: #DEE5DE;
+  --accent: #295447;
+  --accent-hover: #1B4336;
+  --focus: #428568;
 }
-html, body, [class*="css"], [data-testid="stApp"] {
+html, body, [data-testid="stApp"] {
   font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", -apple-system, BlinkMacSystemFont, sans-serif;
 }
-[data-testid="stApp"], [data-testid="stAppViewContainer"] { background:var(--canvas); color:var(--ink); }
-[data-testid="stSidebar"] {background:#F0F1EB; border-right:1px solid #DEE2DA;}
-[data-testid="stSidebar"] [data-testid="stVerticalBlock"] { gap:0.58rem; }
-[data-testid="stSidebar"] .stButton>button {border-color:#D9DED5; background:transparent; color:var(--ink);}
-[data-testid="stSidebar"] .stButton>button:hover {border-color:var(--pine); color:var(--pine);}
+[data-testid="stApp"], [data-testid="stAppViewContainer"] {background:var(--bg);color:var(--ink);}
+[data-testid="stSidebar"] {background:#F4F6F2;border-right:1px solid var(--line);}
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {gap:.65rem;}
 section.main > div.block-container, [data-testid="stMainBlockContainer"] {
-  max-width:920px; padding-top:2.6rem; padding-bottom:7rem;
+  max-width:872px;
+  padding-top:1.7rem;
+  padding-bottom:6.75rem;
 }
-h1,h2,h3,h4 {color:var(--ink);letter-spacing:-.035em;}
-.main-head {padding:8px 4px 30px; border-bottom:1px solid var(--line); margin-bottom:24px;}
-.main-kicker {color:#846D5B;font-size:11px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;margin-bottom:15px;}
-.main-title {font-size:clamp(30px,4vw,46px);line-height:1.17;letter-spacing:-.065em;font-weight:750;margin:0 0 10px;}
-.main-desc {color:#65746D;font-size:14px;line-height:1.8;max-width:680px;margin:0;}
-.main-meta {display:flex;flex-wrap:wrap;gap:9px;margin-top:23px;}
-.main-chip {display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:650;line-height:1.4;border:1px solid #DDE3DA;border-radius:50px;padding:7px 11px;background:#FCFDF9;color:#52665D;}
-.main-chip .dot {width:6px;height:6px;background:#5C8773;border-radius:50%;display:inline-block;}
-.main-chip.warn .dot {background:var(--accent);}
-.side-brand {font-size:23px;letter-spacing:-.055em;font-weight:800;padding-top:17px;color:#1F352C;}
-.side-brand .mark {display:inline-block;background:#234A3D;color:#fff;border-radius:10px;width:32px;height:32px;text-align:center;line-height:32px;margin-right:7px;font-size:22px;vertical-align:middle;}
-.side-caption {margin:-1px 0 24px 43px;font-size:11px;color:#71817A;letter-spacing:.025em;}
-.side-section {font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-weight:800;color:#829088;margin:17px 0 6px;}
-.side-small {font-size:11px;color:#6E7C74;line-height:1.6;}
-.empty-wrap {padding:17px 2px 19px;}
-.empty-kicker {font-size:12px;font-weight:730;color:#A46C58;letter-spacing:.07em;text-transform:uppercase;}
-.empty-title {font-size:23px;font-weight:730;letter-spacing:-.04em;margin:7px 0;}
-.empty-desc {font-size:13px;color:#77827B;margin:0 0 18px;line-height:1.7;}
-[data-testid="stChatMessage"] {background:#FFFFFF;border:1px solid #E7EAE4;border-radius:17px;padding:1.1rem 1.25rem;margin:10px 0;box-shadow:0 2px 9px rgba(30,49,38,.024);}
+/* The existing wordmark is retained, not replaced with a decorative logo. */
+.brand {display:flex;align-items:center;gap:10px;font-size:20px;font-weight:760;
+  letter-spacing:-.055em;color:#263B30;margin:15px 0 3px;}
+.brand-symbol {display:inline-flex;width:30px;height:30px;align-items:center;justify-content:center;
+  border:1px solid #C7D7C9;border-radius:8px;background:#E9F0E8;font-size:19px;color:var(--accent);}
+.brand-sub {color:#627568;font-size:12px;margin:0 0 20px 40px;letter-spacing:-.005em;}
+.sidebar-heading {font-size:12px;font-weight:700;letter-spacing:-.01em;color:#52685A;margin:0 0 5px;}
+.side-divider {height:1px;background:var(--line);margin:21px 0 15px;}
+.side-hint {font-size:12px;color:#52685C;line-height:1.65;margin-top:2px;}
+.sidebar-meta {font-size:12px;color:#52685D;line-height:1.65;}
+.sidebar-meta p {font-size:12px;color:#657469;line-height:1.55;margin-top:8px;}
+[data-testid="stSidebar"] [data-testid="stExpander"]{background:transparent;border-color:#DDE5DC;}
+/* Compact app chrome: title and environment do not compete with the task. */
+.workspace-bar {display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:7px 0 19px;border-bottom:1px solid var(--line);margin-bottom:0;}
+.workspace-name {font-size:14px;font-weight:715;color:#283B30;letter-spacing:-.025em;}
+.workspace-meta {display:flex;align-items:center;gap:9px;color:#5C6F63;font-size:12px;white-space:nowrap;}
+.status-dot {height:7px;width:7px;background:#4B8667;border-radius:50%;display:inline-block;}
+.meta-separator {color:#AEBDB1;}
+/* Hero: one question, one clear explanation, no redundant second heading. */
+.welcome {padding:clamp(52px,9vh,92px) 0 53px;max-width:790px;}
+.welcome-eyebrow {display:flex;align-items:center;gap:11px;font-size:11px;font-weight:700;
+  color:#476E59;letter-spacing:.12em;margin-bottom:22px;}
+.welcome-rule {display:block;width:23px;height:2px;background:var(--accent);flex-shrink:0;}
+.welcome-title {font-size:clamp(33px,3.2vw,42px);line-height:1.24;letter-spacing:-.065em;
+  font-weight:720;color:#1E3027;margin:0;word-break:keep-all;}
+.welcome-description {margin:23px 0 0;color:var(--muted);font-size:15.5px;line-height:1.82;
+  letter-spacing:-.016em;word-break:keep-all;}
+/* Starter actions are content-led rows, not four indistinguishable cards. */
+.st-key-welcome_actions {padding-top:0;}
+.welcome-actions-heading {display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  margin-bottom:15px;border-bottom:1px solid var(--line);padding-bottom:13px;}
+.welcome-actions-title {font-size:14px;font-weight:700;letter-spacing:-.025em;color:var(--ink);}
+.welcome-actions-count {font-size:10.5px;font-weight:650;color:#607467;letter-spacing:.09em;}
+.st-key-welcome_actions .suggestion-index {font-size:11px;letter-spacing:.09em;
+  font-weight:680;color:#557B64;margin:8px 0 0;}
+.st-key-welcome_actions .stButton > button:not([kind="primary"]) {
+  display:flex;width:100%;min-height:39px;margin:0;border:0;border-radius:0;background:transparent;
+  box-shadow:none;text-align:left;justify-content:space-between;align-items:center;
+  padding:6px 2px 4px 0;color:#20352A;font-size:16px;font-weight:675;
+  letter-spacing:-.03em;transition:color .15s ease;
+}
+.st-key-welcome_actions .stButton > button:not([kind="primary"])::after {
+  content:"↗";font-size:18px;font-weight:400;line-height:1;color:#658472;
+  transform:translateY(0);transition:transform .15s ease,color .15s ease;
+}
+.st-key-welcome_actions .stButton > button:not([kind="primary"]):hover {
+  color:var(--accent-hover);background:transparent;border:0;
+}
+.st-key-welcome_actions .stButton > button:not([kind="primary"]):hover::after {
+  color:var(--accent-hover);transform:translate(2px,-2px);
+}
+.st-key-welcome_actions .stButton > button:not([kind="primary"]):focus-visible {
+  outline:2px solid var(--focus);outline-offset:3px;border-radius:2px;
+}
+.st-key-welcome_actions .suggestion-hint {font-size:12.5px;color:var(--muted);line-height:1.6;
+  margin:-2px 0 20px;letter-spacing:-.01em;word-break:keep-all;}
+/* Shared controls: preserve original behavior and conversation/approval layouts. */
+.stButton > button {min-height:41px;border-radius:9px;font-weight:650;letter-spacing:-.02em;}
+.stButton > button:not([kind="primary"]) {background:#FFFFFF;border:1px solid var(--line);color:#3C5145;}
+.stButton > button:not([kind="primary"]):hover {border-color:#91AC99;background:#F8FBF8;color:#234839;}
+.stButton > button[kind="primary"], .stButton > button[data-testid="stBaseButton-primary"] {
+  background:var(--accent);border-color:var(--accent);color:#fff;
+}
+.stButton > button[kind="primary"]:hover {background:var(--accent-hover);border-color:var(--accent-hover);}
+.stButton > button:focus-visible {outline:2px solid var(--focus);outline-offset:2px;}
+[data-testid="stChatMessage"] {border:1px solid var(--line);background:var(--paper);border-radius:13px;
+  padding:1rem 1.08rem;margin:9px 0;box-shadow:none;}
 [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]),
-[data-testid="stChatMessage"]:has([aria-label="Chat message from user"]) {background:#F1F3ED;border-color:#E0E5DC;}
-[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] p {font-size:14px;line-height:1.8;}
-[data-testid="stChatInput"] {border-radius:16px;box-shadow:0 10px 33px rgba(19,37,30,.09);overflow:hidden;}
-[data-testid="stChatInput"] textarea {font-size:14px !important;}
-.stButton>button[kind="primary"], .stButton>button[data-testid="stBaseButton-primary"] {
-  background:#254D3F;border:1px solid #254D3F;color:#fff;border-radius:11px; font-weight:650;
+[data-testid="stChatMessage"]:has([aria-label="Chat message from user"]) {
+  border-color:#E3EAE2;background:#F1F5F0;
 }
-.stButton>button[kind="primary"]:hover {background:#17382D;border-color:#17382D;color:#fff;}
-.stButton>button {border-radius:12px;min-height:42px;font-weight:600;transition:background .12s ease,border-color .12s ease;}
-.stButton>button:not([kind="primary"]):hover {border-color:#789586;color:#234B3D;}
-[data-testid="stExpander"] {border:1px solid var(--line);background:#fff;border-radius:12px;}
-[data-testid="stAlert"] {border-radius:12px;}
-[data-testid="stForm"] {border-color:#DEE5DE;border-radius:13px;}
-[data-testid="stChatInput"] button {color:#274F40;}
-.workflow-tag {display:inline-block;padding:5px 9px;border:1px solid #DAE5DD;background:#F5F9F4;border-radius:8px;color:#466558;font-size:11px;font-weight:690;margin:0 0 6px;}
-.workflow-tag.danger {background:#FCF4EE;border-color:#F1DED4;color:#AF6B4E;}
-.approval-panel {border-left:3px solid #BD8169;padding:3px 0 2px 17px;margin:15px 0 12px;}
-.approval-kicker {text-transform:uppercase;font-size:10px;letter-spacing:.16em;color:#AB7158;font-weight:800;}
-.approval-title {font-size:19px;font-weight:740;letter-spacing:-.035em;margin:5px 0 6px;}
-.approval-desc {font-size:12px;color:#79877C;line-height:1.7;margin:0;}
-.tiny-footer {font-size:11px;color:#929B95;line-height:1.8;padding-top:14px;text-align:center;}
-@media(max-width:750px) {
- section.main>div.block-container,[data-testid="stMainBlockContainer"] {padding:1.2rem 0.8rem 5.5rem;}
- .main-head{padding-bottom:18px;}
- .main-title{font-size:30px;}
- [data-testid="stChatMessage"] {padding:.75rem .7rem;}
+[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] p {font-size:14px;line-height:1.75;}
+[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] li {font-size:14px;line-height:1.65;margin-bottom:4px;}
+[data-testid="stChatMessage"] [data-testid="stExpander"] {border:1px solid #E5ECE4;border-radius:9px;background:#FBFCFA;}
+/* Chat remains the primary action, including before the first message. */
+[data-testid="stChatInput"] {background:#fff;border:1px solid #CCDCD0;border-radius:12px;
+  box-shadow:0 3px 12px rgba(32,57,43,.045);}
+[data-testid="stChatInput"]:focus-within {border-color:#4E8868;
+  box-shadow:0 0 0 3px rgba(66,133,104,.14);}
+[data-testid="stChatInput"] textarea {font-size:15px !important;color:var(--ink);}
+[data-testid="stChatInput"] button {color:var(--accent);}
+[data-testid="stExpander"], [data-testid="stAlert"] {border-radius:10px;}
+.approval-panel {margin:26px 0 14px;padding:14px 17px;border:1px solid #E9D9CE;border-radius:10px;background:#FFFCF9;}
+.approval-kicker {font-size:11px;letter-spacing:.08em;font-weight:750;color:#976F58;}
+.approval-title {font-size:17px;font-weight:760;letter-spacing:-.04em;color:#342D27;margin:5px 0;}
+.approval-desc {font-size:13px;line-height:1.65;color:#786E67;margin:4px 0 0;}
+.footer-note {text-align:center;color:#63746A;font-size:12px;padding-top:23px;line-height:1.6;}
+@media (max-width:760px) {
+  section.main>div.block-container,[data-testid="stMainBlockContainer"] {padding:1rem .95rem 5.8rem;}
+  .workspace-bar {padding-bottom:12px;}
+  .workspace-meta {font-size:11px;gap:6px;}
+  .welcome {padding:38px 0 26px;}
+  .welcome-title {font-size:clamp(29px,8.2vw,36px);line-height:1.28;}
+  .welcome-description {font-size:14.5px;line-height:1.75;margin-top:16px;}
+  .desktop-break {display:none;}
+  .welcome-actions-count {display:none;}
+  .st-key-welcome_actions [data-testid="stHorizontalBlock"] {flex-direction:column;gap:0;}
+  .st-key-welcome_actions [data-testid="column"] {width:100% !important;min-width:0 !important;flex:1 1 100% !important;}
+  .st-key-welcome_actions .suggestion-hint {margin-bottom:11px;}
+  [data-testid="stChatMessage"] {padding:.78rem .78rem;}
+  [data-testid="stChatInput"] textarea {font-size:14px !important;}
+}
+@media (prefers-reduced-motion:reduce) {
+  .st-key-welcome_actions .stButton > button,
+  .st-key-welcome_actions .stButton > button::after {transition:none !important;}
 }

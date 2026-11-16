@@ -1,8 +1,16 @@
-"""Remote Replit adapter; no local mock HTTP server required."""
+"""ProjectAgain v0.4 API adapter. GET only in live mode via services.marketplace.
+
+Real tokens are user-owned opaque bearer grants, *not* JWTs or a shared app key.
+No remote calls are made by importing this module.
+"""
 import time
 import uuid
+from urllib.parse import urlsplit
+
 import requests
-from .config import MARKETPLACE_BASE_URL, AGENT_MODE, MARKETPLACE_AUTH_SCHEME
+
+from .config import MARKETPLACE_BASE_URL, MARKETPLACE_AUTH_SCHEME
+from .request_context import include_demo
 
 
 class MarketplaceError(Exception):
@@ -12,93 +20,108 @@ class MarketplaceError(Exception):
         super().__init__(message)
 
 
+def origin_only(raw):
+    """Accept https://host or the old documented https://host/api/v1, once."""
+    parsed = urlsplit((raw or '').strip())
+    if parsed.scheme != 'https' or not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise ValueError('플랫폼 주소는 https://호스트 형식이어야 합니다.')
+    if parsed.path.rstrip('/') not in ('', '/api/v1'):
+        raise ValueError('플랫폼 주소에 추가 경로를 넣을 수 없습니다.')
+    return '{}://{}'.format(parsed.scheme, parsed.netloc).rstrip('/')
+
+
 class MarketplaceClient:
-    def __init__(self, token, base_url=None, auth_scheme=None):
-        self.base_url = (base_url or MARKETPLACE_BASE_URL).rstrip('/')
-        self.token = token
-        # Mock always honors the supplied OpenAPI Bearer JWT shape.
-        self.auth_scheme = auth_scheme or ('bearer' if AGENT_MODE == 'mock' else MARKETPLACE_AUTH_SCHEME)
-        if self.auth_scheme not in ('bearer', 'x-api-key'):
-            raise ValueError('허용되지 않은 플랫폼 인증 방식')
+    def __init__(self, token='', base_url=None, auth_scheme=None):
+        self.base_url = origin_only(base_url if base_url is not None else MARKETPLACE_BASE_URL)
+        self.token = str(token or '').strip()
+        self.auth_scheme = auth_scheme or MARKETPLACE_AUTH_SCHEME
+        if self.auth_scheme != 'bearer':
+            raise ValueError('ProjectAgain의 위임 토큰은 Bearer 방식입니다.')
 
     def request(self, method, path, payload=None, params=None, key=None):
+        method = method.upper()
+        if not path.startswith('/api/v1/') or '://' in path or '\\' in path or '?' in path or '#' in path:
+            raise MarketplaceError(400, '허용되지 않은 API 경로입니다.', 'INVALID_PATH')
         headers = {'X-Request-ID': str(uuid.uuid4()), 'Accept': 'application/json'}
-        if self.auth_scheme == 'bearer':
+        if self.token:
             headers['Authorization'] = 'Bearer ' + self.token
-        else:
-            headers['X-API-Key'] = self.token
+        elif path.startswith(('/api/v1/auth/', '/api/v1/offers', '/api/v1/buyer-preferences/', '/api/v1/agent/', '/api/v1/transactions/')):
+            raise MarketplaceError(401, '개인 데이터 조회에는 사용자별 플랫폼 위임 토큰이 필요합니다.', 'DELEGATION_REQUIRED')
         if method in ('POST', 'PUT', 'PATCH', 'DELETE'):
             if not key:
-                raise ValueError('변경 API는 Idempotency-Key가 필요합니다.')
+                raise ValueError('변경 API에는 Idempotency-Key가 필요합니다.')
             headers['Idempotency-Key'] = key
-        # Only retry idempotent GET requests. Never auto-retry uncertain POST.
         tries = 3 if method == 'GET' else 1
         for attempt in range(tries):
             try:
-                response = requests.request(method, self.base_url + path,
-                    headers=headers, json=payload, params=params, timeout=(3, 7), allow_redirects=False)
+                response = requests.request(method, self.base_url + path, headers=headers,
+                    json=payload, params=params, timeout=(3, 7), allow_redirects=False)
             except requests.RequestException as exc:
                 if attempt < tries - 1:
                     time.sleep(0.2 * (2 ** attempt))
                     continue
-                raise MarketplaceError(503, '플랫폼 통신 실패: ' + type(exc).__name__)
+                raise MarketplaceError(503, '플랫폼 연결 실패: ' + type(exc).__name__, 'NETWORK_ERROR') from None
             if response.status_code in (429, 500, 502, 503, 504) and attempt < tries - 1:
                 time.sleep(0.2 * (2 ** attempt))
                 continue
+            if 300 <= response.status_code < 400:
+                raise MarketplaceError(502, '예상하지 않은 API 이동 응답입니다.', 'REDIRECT_BLOCKED')
             if response.status_code >= 400:
                 try:
-                    error = response.json().get('error', {})
-                    message = error.get('message', '플랫폼 API 오류')
-                    code = error.get('code', 'REMOTE_ERROR')
-                except (ValueError, AttributeError):
-                    message, code = '플랫폼 오류 HTTP {}'.format(response.status_code), 'REMOTE_ERROR'
-                raise MarketplaceError(response.status_code, message, code)
+                    err = response.json().get('error', {})
+                    msg = str(err.get('message') or '플랫폼 API 오류')[:300]
+                    if self.token and len(self.token) > 12:
+                        msg = msg.replace(self.token, '[REDACTED]')
+                    code = str(err.get('code') or 'REMOTE_ERROR')[:80]
+                except (ValueError, AttributeError, TypeError):
+                    msg, code = '플랫폼 오류 HTTP {}'.format(response.status_code), 'REMOTE_ERROR'
+                raise MarketplaceError(response.status_code, msg, code)
             try:
                 return response.json()
             except ValueError:
-                raise MarketplaceError(502, '플랫폼이 JSON이 아닌 응답을 반환했습니다.')
-
-        raise MarketplaceError(503, '플랫폼 요청 실패')
+                raise MarketplaceError(502, '플랫폼 응답이 JSON이 아닙니다.', 'INVALID_RESPONSE') from None
+        raise MarketplaceError(503, '플랫폼 요청 실패', 'REMOTE_ERROR')
 
     def me(self):
         return self.request('GET', '/api/v1/auth/me')
 
+    def context(self):
+        return self.request('GET', '/api/v1/agent/context')
+
     def listings(self, **params):
-        return self.request('GET', '/api/v1/listings', params=params)
+        params = dict(params)
+        # Explicit filter for diagnostics overrides session default.
+        params.setdefault('include_demo', 'true' if include_demo() else 'false')
+        if not params.get('q'):
+            params.pop('q', None)
+        result = self.request('GET', '/api/v1/listings', params=params)
+        if not isinstance(result, dict) or not isinstance(result.get('items'), list):
+            raise MarketplaceError(502, '매물 목록 형식이 계약과 다릅니다.', 'CONTRACT_MISMATCH')
+        return result
 
     def listing(self, listing_id):
-        return self.request('GET', '/api/v1/listings/' + listing_id)
+        # Strict UUID prevents untrusted prompt values from altering routing.
+        try:
+            listing_id = str(uuid.UUID(str(listing_id)))
+        except (ValueError, TypeError, AttributeError):
+            raise MarketplaceError(422, '유효한 매물 UUID가 필요합니다.', 'INVALID_ID') from None
+        params = {'include_demo': 'true'} if include_demo() else None
+        return self.request('GET', '/api/v1/listings/' + listing_id, params=params)
+
+    def buyer_preferences(self):
+        return self.request('GET', '/api/v1/buyer-preferences/me')
 
     def reports(self, listing_id):
-        return self.request('GET', '/api/v1/listings/' + listing_id + '/inspection-reports')
-
-    def publish_report(self, listing_id, report, key):
-        return self.request('POST', '/api/v1/listings/' + listing_id + '/inspection-reports', report, key=key)
-
-    def create_action(self, action, key):
-        return self.request('POST', '/api/v1/agent-actions', action, key=key)
-
-    def action(self, action_id):
-        return self.request('GET', '/api/v1/agent-actions/' + action_id)
-
-    def action_approve(self, action_id, key):
-        return self.request('POST', '/api/v1/agent-actions/' + action_id + '/approve', key=key)
-
-    def action_reject(self, action_id, key):
-        return self.request('POST', '/api/v1/agent-actions/' + action_id + '/reject', key=key)
-
-    def action_execute(self, action_id, key):
-        return self.request('POST', '/api/v1/agent-actions/' + action_id + '/execute', key=key)
+        return self.request('GET', '/api/v1/listings/' + str(uuid.UUID(listing_id)) + '/inspection-reports')
 
     def offers(self, listing_id):
         return self.request('GET', '/api/v1/offers', params={'listing_id': listing_id})
 
-    def accept_offer(self, offer_id, version, key):
-        return self.request('POST', '/api/v1/offers/' + offer_id + '/accept',
-                            {'expected_version': version}, key=key)
+    def offer(self, offer_id):
+        return self.request('GET', '/api/v1/offers/' + str(uuid.UUID(str(offer_id))))
+
+    def action(self, action_id):
+        return self.request('GET', '/api/v1/agent-actions/' + str(uuid.UUID(str(action_id))))
 
     def handover_checks(self, tx_id):
-        return self.request('GET', '/api/v1/transactions/' + tx_id + '/handover-checks')
-
-    def create_handover_check(self, tx_id, payload, key):
-        return self.request('POST', '/api/v1/transactions/' + tx_id + '/handover-checks', payload, key=key)
+        return self.request('GET', '/api/v1/transactions/' + str(uuid.UUID(str(tx_id))) + '/handover-checks')

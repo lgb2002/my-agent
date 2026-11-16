@@ -11,12 +11,13 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 from core import db
 from core.config import (
-    AGENT_MODE, MARKETPLACE_BASE_URL, MARKETPLACE_AUTH_SCHEME, MARKETPLACE_API_KEY,
+    AGENT_MODE, MARKETPLACE_BASE_URL, MARKETPLACE_AUTH_SCHEME,
     OPENAI_MODEL, RULE_VERSION, MAX_MODEL_CALLS_PER_JOB, MAX_COST_KRW_PER_JOB,
     openai_chat_status, marketplace_config_error, writes_enabled,
 )
 from core.inspector import inspect_zip, UnsafeArchive, MAX_ARCHIVE_BYTES
 from core.marketplace_client import MarketplaceError
+from core.request_context import delegated_token, visitor_id
 from core.policy import (
     expiration_iso, metadata_findings, offer_payload, payload_sha, recommendation, verify_amount,
 )
@@ -75,11 +76,7 @@ class AgentRuntime:
         elif AGENT_MODE == 'mock':
             status = '로컬 DEMO (서버 불필요)'
         else:
-            try:
-                client_for_actor(self.actor_name).me()
-                status = 'Replit 연결됨 (읽기 전용)'
-            except (MarketplaceError, DemoMarketplaceError):
-                status = '인증 또는 연결 확인 필요'
+            status = '사용자별 조회 전용' if delegated_token() else '공개 매물 조회 전용'
         return {'status': 'ok', 'api_version': '0.3.0', 'marketplace': status,
                 'agent_mode': AGENT_MODE, 'rule_version': RULE_VERSION,
                 'max_model_calls_per_job': MAX_MODEL_CALLS_PER_JOB,
@@ -94,7 +91,14 @@ class AgentRuntime:
         if config_error:
             error(503, 'MARKETPLACE_CONFIG', config_error)
         client = client_for_actor(self.actor_name)
+        if AGENT_MODE == 'live' and not delegated_token():
+            # Anonymous access is limited to public listings; isolate local job history
+            # using a random visitor identifier kept only in Streamlit session state.
+            return client, {'id': 'visitor:' + (visitor_id() or str(uuid.uuid4())),
+                            'role': 'PUBLIC', 'scopes': []}
         actor = client.me()
+        if not isinstance(actor, dict) or not actor.get('id'):
+            error(502, 'INVALID_PRINCIPAL', '플랫폼 사용자 응답을 확인할 수 없습니다.')
         return client, actor
 
     def process_job(self, job_id, client, task, listing_id, request):
@@ -104,18 +108,24 @@ class AgentRuntime:
             db.add_step(job_id, 'AUTH', 'PASS', '플랫폼 사용자 조회 및 권한 확인')
             if task == 'RECOMMEND':
                 items = []
-                cursor = None
+                cursor = 0
+                seen_cursors = set()
                 for _ in range(10):
-                    params = {'limit': 100}
-                    if cursor:
-                        params['cursor'] = cursor
-                    part = client.listings(**params)
+                    if cursor in seen_cursors:
+                        raise ValueError('플랫폼 페이지 커서가 반복되었습니다.')
+                    seen_cursors.add(cursor)
+                    part = client.listings(limit=100, cursor=cursor)
+                    if not isinstance(part, dict) or not isinstance(part.get('items'), list):
+                        raise ValueError('플랫폼 매물 목록 응답 형식 불일치')
                     items.extend(part['items'])
-                    cursor = part.get('next_cursor')
-                    if not cursor:
+                    nxt = part.get('next_cursor')
+                    if nxt is None or nxt == '':
                         break
-                if cursor:
-                    raise ValueError('매물 API 조회 페이지 제한에 도달했습니다.')
+                    if not str(nxt).isdigit():
+                        raise ValueError('플랫폼 커서가 정수 오프셋이 아닙니다.')
+                    cursor = int(nxt)
+                else:
+                    raise ValueError('추천 조회가 10페이지 제한에 도달했습니다. 검색 조건을 좁혀 주세요.')
                 db.add_step(job_id, 'LISTINGS', 'PASS', '매물 {}개 조회'.format(len(items)))
                 result = recommendation(items, request['preferences'], demo_only=(AGENT_MODE == 'mock'))
                 result['is_demo'] = AGENT_MODE == 'mock'
@@ -273,7 +283,16 @@ class AgentRuntime:
             if tail == ['me'] and method == 'GET':
                 return actor
             if tail == ['listings'] and method == 'GET':
-                return client.listings(q=query.get('q',[''])[0], limit=100)
+                requested_limit = query.get('limit', ['100'])[0]
+                requested_cursor = query.get('cursor', ['0'])[0]
+                try:
+                    limit = int(requested_limit)
+                    cursor = int(requested_cursor)
+                except (TypeError, ValueError):
+                    error(422, 'INVALID_PAGINATION', 'limit/cursor는 정수여야 합니다.')
+                if limit < 1 or limit > 100 or cursor < 0:
+                    error(422, 'INVALID_PAGINATION', 'limit 1~100, cursor 0 이상만 지원합니다.')
+                return client.listings(q=query.get('q', [''])[0], limit=limit, cursor=cursor)
             if len(tail) == 2 and tail[0] == 'listings' and method == 'GET':
                 return client.listing(tail[1])
             if len(tail) == 3 and tail[0] == 'listings' and tail[2] == 'reports' and method == 'GET':

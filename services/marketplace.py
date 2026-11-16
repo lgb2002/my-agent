@@ -3,7 +3,8 @@
 Both expose the same subset of the marketplace OpenAPI methods. The DEMO
 adapter does not require any HTTP server; the remote adapter never writes.
 """
-from core.config import AGENT_MODE, DEMO_BUYER_TOKEN, DEMO_SELLER_TOKEN, MARKETPLACE_API_KEY
+from core.config import AGENT_MODE, DEMO_BUYER_TOKEN, DEMO_SELLER_TOKEN
+from core.request_context import delegated_token
 from core.marketplace_client import MarketplaceClient, MarketplaceError
 from services import demo_marketplace as demo
 
@@ -64,7 +65,7 @@ class DemoClient:
 class LiveReadOnlyClient(MarketplaceClient):
     """Only the allowed GET routes. Future writes require new security design."""
     def __init__(self):
-        super().__init__(MARKETPLACE_API_KEY)
+        super().__init__(delegated_token())
 
     def request(self, method, path, payload=None, params=None, key=None):
         if method.upper() != 'GET':

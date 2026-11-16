@@ -5,8 +5,6 @@
 *.pem
 *.key
 .streamlit/secrets.toml
-specs_snapshot
-tests
 
 # Python / VS Code
 .venv/

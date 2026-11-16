@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """디지털 자산 거래 AI 에이전트 | Chat-first Streamlit app (one process, Python 3.12)."""
 import json
+import hashlib
+import uuid
 import re
 from html import escape
 from pathlib import Path
@@ -10,19 +12,30 @@ from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env", override=False)
+# Bridge Streamlit Cloud top-level TOML Secrets before core.config is imported.
+# Never render, log or expose secret values.
+from core.runtime_secrets import configure_from_secrets, ai_activation_reason
+try:
+    configure_from_secrets(st.secrets)
+except Exception:
+    # Local installation without .streamlit/secrets.toml.
+    pass
 
 from agent.chat import ChatAgent  # noqa: E402
 from agent.core import AgentError, AgentRuntime  # noqa: E402
 from agent.tools import TOOL_LABELS, perform_confirmed_action  # noqa: E402
-from core.config import AGENT_MODE, ENABLE_OPENAI_CHAT, OPENAI_API_KEY, OPENAI_MODEL  # noqa: E402
+from core.config import AGENT_MODE, ENABLE_OPENAI_CHAT, OPENAI_API_KEY, OPENAI_MODEL, MARKETPLACE_INCLUDE_DEMO, marketplace_config_error  # noqa: E402
+from core.request_context import set_request_context  # noqa: E402
 from core.llm_service import contains_obvious_secret  # noqa: E402
+from core.config import MARKETPLACE_BASE_URL  # noqa: E402
+from core.live_diagnostics import run_diagnostics  # noqa: E402
 
-st.set_page_config(page_title="Asset Agent | 대화형 거래 에이전트", page_icon="🧭", layout="centered", initial_sidebar_state="expanded")
+st.set_page_config(page_title="ProjectAgain · 프로젝트 에이전트", page_icon="🧭", layout="wide", initial_sidebar_state="expanded")
 st.markdown("<style>" + (ROOT / "assets" / "style.css").read_text(encoding="utf-8") + "</style>", unsafe_allow_html=True)
 
 
 def get_session(scope):
-    all_sessions = st.session_state.setdefault("chat_sessions_v4", {})
+    all_sessions = st.session_state.setdefault("chat_sessions_v06", {})
     if scope not in all_sessions:
         all_sessions[scope] = {"turns": [], "context": {"recent_listings": []}, "pending": None}
     return all_sessions[scope]
@@ -35,18 +48,13 @@ def add_turn(session, role, content, **kwargs):
 
 
 def show_event(event, idx, turn_id):
-    prefix = "✓" if event.get("success") else "!"
-    label = escape(event.get("label", event.get("name", "툴")))
-    st.markdown('<span class="workflow-tag{}">{} · {}</span>'.format(
-        "" if event.get("success") else " danger", prefix, label), unsafe_allow_html=True)
-    with st.expander("{} · 실행 결과 확인".format(label), expanded=False):
-        st.caption(event.get("summary", ""))
+    label = str(event.get("label") or event.get("name") or "도구")
+    status = "완료" if event.get("success") else "확인 필요"
+    with st.expander("{}  ·  {}  ·  결과 상세".format(label, status), expanded=False):
+        st.caption(str(event.get("summary") or ""))
         data = event.get("data") or {}
         if data:
             st.json(data, expanded=False)
-        jid = data.get("job_id")
-        if jid:
-            st.caption("작업 ID: " + jid)
 
 
 def show_turn(turn, idx):
@@ -65,9 +73,9 @@ def pending_ui(session, actor_name):
         session["pending"] = None
         return
     st.markdown('''<div class="approval-panel">
-      <div class="approval-kicker">Human in control / 승인 대기</div>
-      <div class="approval-title">실행 전에 내용을 확인해 주세요</div>
-      <p class="approval-desc">AI는 아래 단계를 자동으로 승인하거나 전송하지 못합니다. DEMO 환경에서만 사용 가능해요.</p>
+      <div class="approval-kicker">사용자 확인 필요 · DEMO</div>
+      <div class="approval-title">거래 요청을 확인해 주세요</div>
+      <p class="approval-desc">대화만으로 거래가 진행되지 않습니다. 아래 내용을 직접 확인한 뒤 진행해 주세요.</p>
       </div>''', unsafe_allow_html=True)
     kind = pending["kind"]
     if kind in ("offer_draft", "counter_draft"):
@@ -158,91 +166,156 @@ def confirmed(session, actor, operation):
         st.error("확인 단계 처리 중 오류가 발생했어요. 상태를 다시 조회해줘.")
 
 
-# ── Sidebar: utility controls, not the main navigation. ──────────────
+# ── Sidebar: connection and utility, not a second workflow dashboard. ──
+visitor = st.session_state.setdefault("visitor_uuid_v06", uuid.uuid4().hex)
 with st.sidebar:
-    st.markdown('<div class="side-brand"><span class="mark">◈</span> asset agent</div>'
-                '<div class="side-caption">DIGITAL PROJECT DESK</div>', unsafe_allow_html=True)
-    st.markdown('<div class="side-section">WORKSPACE</div>', unsafe_allow_html=True)
+    st.markdown('<div class="brand"><span class="brand-symbol">◈</span><span>ProjectAgain</span></div>'
+                '<div class="brand-sub">프로젝트 거래 에이전트</div>', unsafe_allow_html=True)
+
     if AGENT_MODE == "mock":
-        actor = st.selectbox("샌드박스 계정", ["구매자 B", "판매자 A"], label_visibility="collapsed")
+        st.caption("연결 환경")
+        actor = st.selectbox("체험할 역할", ["구매자 B", "판매자 A"], label_visibility="collapsed")
+        token = ""
+        show_demo = True
+        st.markdown('<p class="side-hint">샌드박스 · 테스트 매물과 가상 거래만 사용</p>', unsafe_allow_html=True)
     else:
-        actor = "Replit 연결 계정"
-        st.caption("Replit 실플랫폼 · 조회 전용")
-    scope = AGENT_MODE + "::" + actor
+        actor = "ProjectAgain 사용자"
+        st.caption("플랫폼 연결")
+        token = st.text_input("내 위임 토큰 (선택)", type="password", key="user_grant_v06",
+            placeholder="공개 매물 조회에는 필요 없음", help="ProjectAgain 계정에서 발급받은 단기 Bearer 위임 토큰입니다. 로그인 비밀번호나 JWT가 아닙니다.")
+        show_demo = st.checkbox("시연 매물 포함", value=MARKETPLACE_INCLUDE_DEMO, key="include_demo_v06")
+        if token:
+            st.caption("개인 데이터 조회는 토큰의 권한 범위 내에서만 가능합니다.")
+            if st.button("토큰 연결 해제", width="stretch", on_click=lambda: st.session_state.update(user_grant_v06="")):
+                pass
+        else:
+            st.caption("공개 매물만 조회 · 개인 데이터 미연결")
+        st.caption("위임 토큰은 채팅에 입력하지 마세요. 실제 거래 변경은 차단되어 있습니다.")
+
+    # Shared Cloud Secrets grant is intentionally not used by public visitors.
+    set_request_context(token=token, visitor_id=visitor, include_demo=show_demo)
+    owner_scope = hashlib.sha256(token.encode("utf-8")).hexdigest()[:12] if token else visitor
+    scope = '{}::{}::{}::{}'.format(AGENT_MODE, actor, owner_scope if AGENT_MODE == 'live' else 'demo', show_demo)
     current = get_session(scope)
-    if st.button("＋ 새 대화", width="stretch"):
-        st.session_state["chat_sessions_v4"][scope] = {"turns": [], "context": {"recent_listings": []}, "pending": None}
+    if st.button("＋ 새 대화", type="primary", width="stretch"):
+        st.session_state["chat_sessions_v06"][scope] = {"turns": [], "context": {"recent_listings": []}, "pending": None}
         st.rerun()
-    st.markdown('<div class="side-section">CONNECTION</div>', unsafe_allow_html=True)
-    if ENABLE_OPENAI_CHAT and OPENAI_API_KEY:
-        st.markdown('<div class="side-small">● OpenAI Tool Calling 활성 · 모델: {}</div>'.format(escape(OPENAI_MODEL)), unsafe_allow_html=True)
-    else:
-        st.markdown('<div class="side-small">● 로컬 도구 실행 · OpenAI 비활성</div>', unsafe_allow_html=True)
-    st.markdown('<div class="side-small">● {} · {} 모드</div>'.format(
-        "내장 DEMO" if AGENT_MODE == "mock" else "Replit HTTPS", escape(AGENT_MODE)), unsafe_allow_html=True)
-    st.markdown('<div class="side-section">AVAILABLE TOOLS</div>', unsafe_allow_html=True)
-    with st.expander("연결된 {}개 도구".format(len(TOOL_LABELS))):
-        for label in TOOL_LABELS.values():
+
+    st.markdown('<div class="side-divider"></div><div class="sidebar-heading">도구와 설정</div>', unsafe_allow_html=True)
+    with st.expander("사용 가능한 도구", expanded=False):
+        for tool, label in TOOL_LABELS.items():
+            if AGENT_MODE == "live" and (tool.startswith("prepare_") or tool == "inspect_attached_zip"):
+                continue
             st.caption("· " + label)
-        st.caption("협상 변경은 채팅 이후 별도 사용자 승인이 필요합니다.")
+        st.caption("상태 변경은 DEMO에서만 사용자 승인을 거쳐 진행합니다.")
+
     if AGENT_MODE == "mock" and actor == "판매자 A":
-        st.markdown('<div class="side-section">SOURCE ARCHIVE</div>', unsafe_allow_html=True)
-        uploaded = st.file_uploader("정적 검사할 ZIP 첨부", type=["zip"], help="최대 4MB · 압축해제/실행하지 않음")
-        if uploaded:
-            st.caption("선택됨: " + uploaded.name[:70])
+        with st.expander("ZIP 정적 검사 파일", expanded=False):
+            uploaded = st.file_uploader("검사할 ZIP", type=["zip"], help="4MB 이하 · 파일을 실행하지 않는 정적 검사")
     else:
         uploaded = None
-    st.markdown('<div class="side-section">RECENT WORK</div>', unsafe_allow_html=True)
-    try:
-        jobs = AgentRuntime(actor).request("GET", "/api/agent/v1/jobs").get("items", [])[:4]
-        for job in jobs:
-            st.caption("{} · {} · {}".format(job["task_type"], job["status"], job["id"][:8]))
-        if not jobs:
-            st.caption("아직 저장된 작업이 없습니다.")
-    except Exception:
-        st.caption("작업 기록 연결 대기 중")
-    st.markdown("---")
+    with st.expander("최근 작업", expanded=False):
+        try:
+            jobs = AgentRuntime(actor).request("GET", "/api/agent/v1/jobs").get("items", [])[:5]
+            if not jobs:
+                st.caption("아직 작업 기록이 없습니다.")
+            for job in jobs:
+                st.caption("{} · {}".format(job.get("task_type", "작업"), job.get("status", "미확인")))
+        except Exception:
+            st.caption("작업 기록 연결 대기 중")
     if current["turns"]:
-        st.download_button("대화 기록 JSON", json.dumps(current["turns"], ensure_ascii=False, indent=2),
-                           file_name="asset_agent_conversation.json", mime="application/json", width="stretch")
-    st.markdown('<div class="side-small">이 프로젝트는 실제 결제·계약·자산 이전을 수행하지 않습니다.</div>', unsafe_allow_html=True)
+        st.download_button("대화 기록 저장", json.dumps(current["turns"], ensure_ascii=False, indent=2),
+                           file_name="projectagain_conversation.json", mime="application/json", width="stretch")
+    if AGENT_MODE == "live":
+        with st.expander("API 연결 진단", expanded=False):
+            st.caption("버튼을 누르면 공개 API를 시연 매물 제외·포함으로 각각 확인하며, 사용자별 인증을 별도 검사합니다.")
+            st.caption("실행 모드: Live · 실제 HTTPS 읽기 전용")
+            st.caption("시연 매물 포함: " + ("켜짐" if show_demo else "꺼짐"))
+            if st.button("연결 상태 검사", key="diagnose_marketplace_v08", width="stretch"):
+                config_error = marketplace_config_error()
+                if config_error:
+                    st.session_state["live_diagnostics_v08"] = {"configuration_error": config_error}
+                else:
+                    with st.spinner("실제 플랫폼 API를 확인하는 중..."):
+                        st.session_state["live_diagnostics_v08"] = run_diagnostics(
+                            MARKETPLACE_BASE_URL, token=token, include_demo=show_demo)
+            report = st.session_state.get("live_diagnostics_v08")
+            if report:
+                if "configuration_error" in report:
+                    st.error(report["configuration_error"])
+                else:
+                    for title, key in (("일반 공개 매물", "public"),
+                                       ("시연 매물 포함", "with_demo"),
+                                       ("사용자별 토큰 인증", "delegation")):
+                        entry = report[key]
+                        status = entry.get("http_status")
+                        status_label = str(status) if status is not None else "미확인"
+                        count = " · {}건".format(entry["count"]) if entry.get("count") is not None else ""
+                        st.caption("{} · HTTP {}{} · {}".format(title, status_label, count, entry["detail"]))
+                    st.info(report["interpretation"])
+                    st.caption("검사 시점의 결과입니다. 토큰·필터·API 주소 변경 후 다시 검사해 주세요.")
+    with st.expander("OpenAI 실행 상태", expanded=False):
+        st.caption(ai_activation_reason(bool(OPENAI_API_KEY), ENABLE_OPENAI_CHAT))
+        st.caption("설정상 활성화와 실제 모델 호출 성공은 다릅니다. 호출 시 API 비용이 발생할 수 있습니다.")
+        if OPENAI_API_KEY and not ENABLE_OPENAI_CHAT:
+            st.caption('Secrets에서 ENABLE_OPENAI_CHAT = "true"로 설정하고 앱을 재시작해야 합니다. 공개 이용자 사용량 제한도 필요합니다.')
+    st.markdown('<div class="side-divider"></div><div class="sidebar-meta">'
+                + ("AI 도구 호출" if ENABLE_OPENAI_CHAT and OPENAI_API_KEY else "규칙형 도구 체험")
+                + ' · ' + escape(OPENAI_MODEL if ENABLE_OPENAI_CHAT and OPENAI_API_KEY else '로컬')
+                + '<p>결제·계약·자산 이전 기능은 제공하지 않습니다.</p></div>', unsafe_allow_html=True)
 
-# ── Main: conversation is the product. ──────────────────────────────
+# ── Main: minimal conversation-first interface. ────────────────────
 online = ENABLE_OPENAI_CHAT and bool(OPENAI_API_KEY)
-status = "AI 자동 도구 선택" if online else "규칙 기반 도구 실행"
-mode_title = "DEMO 데이터" if AGENT_MODE == "mock" else "플랫폼 조회 전용"
-st.markdown('''<div class="main-head">
-  <div class="main-kicker">WORKSPACE / CONVERSATION 01</div>
-  <div class="main-title">대화로 프로젝트를<br>탐색하고, 검증하고, 협상하세요.</div>
-  <p class="main-desc">원하는 조건을 말하면 에이전트가 연결된 도구를 사용해 결과를 가져옵니다.
-    거래에 영향을 주는 행동은 반드시 직접 확인한 후 진행합니다.</p>
-  <div class="main-meta"><span class="main-chip"><span class="dot"></span>{}</span>
-  <span class="main-chip"><span class="dot"></span>{}</span>
-  <span class="main-chip warn"><span class="dot"></span>실거래 차단</span></div>
- </div>'''.format(escape(status), escape(mode_title)), unsafe_allow_html=True)
-
-if AGENT_MODE != "mock":
-    st.info("Replit 실플랫폼 연결은 조회만 지원해요. 인증 키 방식과 권한이 확정되기 전에는 거래 변경이 차단돼요.")
-if not online:
-    st.caption("현재는 API 호출이 없는 규칙 기반 도구 모드예요. OpenAI를 활성화하면 대화 맥락에 맞춰 도구를 자동 선택합니다.")
+connection_error = marketplace_config_error()
+mode_title = "샌드박스" if AGENT_MODE == "mock" else ("플랫폼 설정 필요" if connection_error else "플랫폼 조회 · 읽기 전용")
+model_title = "AI 도구 선택" if online else "규칙형 체험"
+st.markdown('''<div class="workspace-bar"><div class="workspace-name">프로젝트 에이전트</div>
+<div class="workspace-meta"><span class="status-dot"></span>{} <span class="meta-separator">/</span> {}</div></div>'''.format(escape(mode_title), escape(model_title)), unsafe_allow_html=True)
 
 session = current
 pending_prompt = None
 if not session["turns"]:
-    st.markdown('''<div class="empty-wrap"><div class="empty-kicker">START A TASK</div>
-      <div class="empty-title">무엇부터 진행할까요?</div>
-      <p class="empty-desc">직접 도구를 찾을 필요 없어요. 아래 예시를 선택하거나 자유롭게 요청해 보세요.</p></div>''', unsafe_allow_html=True)
+    # The empty chat state is the product's primary entry point: one clear question,
+    # followed by four real tool-entry actions. Keep business logic below unchanged.
+    st.markdown('''<section class="welcome" aria-labelledby="welcome-title">
+        <div class="welcome-eyebrow"><span class="welcome-rule" aria-hidden="true"></span>PROJECTAGAIN / AI DESK</div>
+        <h1 class="welcome-title" id="welcome-title">어떤 프로젝트를<br>찾고 계신가요?</h1>
+        <p class="welcome-description">예산이나 개발 기술, 원하는 운영 방식을 알려주세요. <br class="desktop-break">
+        매물을 찾고 검토할 내용을 대화 안에서 정리해 드립니다.</p>
+        </section>''', unsafe_allow_html=True)
     examples = [
-        ("매물 둘러보기", "현재 등록된 매물 목록 보여줘"),
-        ("예산 맞춤 추천", "100만원 이하 Python 프로젝트 추천해줘"),
-        ("실사 결과 확인", "매물 목록 보여줘"),
-        ("현재 작업 기록", "최근 작업 기록 보여줘"),
+        ("01", "매물 둘러보기", "등록된 프로젝트부터 살펴보기", "현재 등록된 매물 목록 보여줘"),
+        ("02", "조건에 맞춰 추천", "예산과 기술을 바탕으로 후보 찾기", "100만원 이하 Python 프로젝트 추천해줘"),
+        ("03", "실사 준비하기", "검토할 매물을 먼저 선택하기", "현재 등록된 매물 목록 보여줘"),
+        ("04", "작업 내역 확인", "이전에 진행한 작업 다시 보기", "최근 작업 기록 보여줘"),
     ]
-    cols = st.columns(2, gap="small")
-    for i, (label, prompt) in enumerate(examples):
-        with cols[i % 2]:
-            if st.button("↗  " + label, width="stretch", key="start_" + str(i)):
-                pending_prompt = prompt
+    with st.container(key="welcome_actions"):
+        st.markdown('''<div class="welcome-actions-heading">
+           <span class="welcome-actions-title">이런 요청부터 시작해 보세요</span>
+           <span class="welcome-actions-count">QUICK START / 04</span>
+           </div>''', unsafe_allow_html=True)
+        # Use one pair of columns per row. Mobile stacking keeps the reading
+        # and keyboard order 01 -> 02 -> 03 -> 04, including screen readers.
+        for start in (0, 2):
+            columns = st.columns(2, gap="large")
+            for offset, column in enumerate(columns):
+                index = start + offset
+                number, title, hint, prompt = examples[index]
+                with column:
+                    st.markdown('<div class="suggestion-index">{}</div>'.format(number), unsafe_allow_html=True)
+                    if st.button(title, width="stretch", key="welcome_" + str(index)):
+                        pending_prompt = prompt
+                    st.markdown('<p class="suggestion-hint">{}</p>'.format(escape(hint)), unsafe_allow_html=True)
+
+if AGENT_MODE == 'live':
+    if connection_error:
+        st.warning(connection_error)
+    elif not token:
+        st.caption("공개 매물을 조회할 수 있어요. 개인 구매 조건과 제안 내역은 사이드바에서 위임 토큰을 연결한 뒤 확인할 수 있습니다.")
+    else:
+        st.caption("연결된 계정의 위임 권한 내에서 조회합니다. 제안 생성·승인·전송은 차단되어 있습니다.")
+if not online and not session["turns"]:
+    st.caption(ai_activation_reason(bool(OPENAI_API_KEY), ENABLE_OPENAI_CHAT))
 
 for i, turn in enumerate(session["turns"]):
     show_turn(turn, i)
@@ -250,30 +323,33 @@ for i, turn in enumerate(session["turns"]):
 if session.get("pending"):
     pending_ui(session, actor)
 
-text = st.chat_input("예: 100만원 이하 프로젝트 추천해줘", max_chars=2000)
-submitted = text or pending_prompt
+submitted_text = st.chat_input("예: 50만원 이하 Python 프로젝트 추천해줘", max_chars=2000)
+submitted = submitted_text or pending_prompt
 if submitted:
     if len(submitted) > 2000:
-        st.error("메시지는 최대 2000자까지 입력할 수 있어요.")
+        st.error("메시지는 2000자 이내로 입력해 주세요.")
+    elif contains_obvious_secret(submitted):
+        add_turn(session, "assistant", "비밀정보로 보이는 입력은 처리하지 않았습니다. 민감한 정보를 제외하고 다시 요청해 주세요.")
+        st.rerun()
     else:
-        if contains_obvious_secret(submitted):
-            add_turn(session, "user", "[비밀정보로 판단된 입력을 차단했어요]")
-            add_turn(session, "assistant", "API 키나 토큰으로 보이는 내용은 대화 기록과 OpenAI에 저장·전송하지 않도록 차단했어요. 비밀정보를 삭제하고 다시 입력해줘.")
-            st.rerun()
         history = list(session["turns"])
         add_turn(session, "user", submitted)
         context = session["context"]
-        if uploaded is not None:
-            # Only the local static inspector sees bytes; never include attachment bytes in LLM context.
-            if uploaded.size > 4 * 1024 * 1024:
-                st.error("첨부 ZIP은 4MB 이하여야 해요. 더 작은 파일을 첨부해줘.")
-            else:
-                context["attachment_bytes"] = uploaded.getvalue()
-        with st.spinner("연결된 도구를 확인하고 있어요..."):
-            result = ChatAgent(actor).reply(submitted, history, context)
-        context.pop("attachment_bytes", None)
+        try:
+            if uploaded is not None:
+                if uploaded.size > 4 * 1024 * 1024:
+                    st.error("ZIP 파일은 4MB 이하여야 해요.")
+                else:
+                    context["attachment_bytes"] = uploaded.getvalue()
+            with st.spinner("도구를 실행하고 결과를 정리하는 중..."):
+                result = ChatAgent(actor).reply(submitted, history, context)
+        except Exception:
+            result = {"content": "요청을 처리하는 동안 오류가 발생했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.",
+                      "events": [], "pending": None, "mode": "runtime_error"}
+        finally:
+            context.pop("attachment_bytes", None)
         if result.get("pending") and session.get("pending"):
-            add_turn(session, "assistant", result["content"] + "\n\n⚠️ 이전 승인 대기 건이 있어 새로운 승인 요청은 보류했어요. 먼저 처리하거나 취소해줘.",
+            add_turn(session, "assistant", result["content"] + "\n\n이전 승인 요청이 남아 있어 새로운 승인 건은 보류했습니다.",
                      events=result.get("events", []), mode=result.get("mode"))
         else:
             add_turn(session, "assistant", result["content"], events=result.get("events", []), mode=result.get("mode"))
@@ -281,5 +357,4 @@ if submitted:
                 session["pending"] = result["pending"]
         st.rerun()
 
-st.markdown('<div class="tiny-footer">Digital Asset Agent · 근거가 없는 내용은 검증되지 않은 것으로 표시합니다.<br>'
-            'DEMO 거래만 지원 · 개인정보 및 API 키는 채팅에 입력하지 마세요.</div>', unsafe_allow_html=True)
+st.markdown('<p class="footer-note">추천과 분석은 참고 자료이며 실제 거래와 자산 이전을 실행하지 않습니다.</p>', unsafe_allow_html=True)

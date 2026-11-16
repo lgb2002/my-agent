@@ -1,3 +1,5 @@
+# LEGACY DESIGN ONLY. NOT the ProjectAgain v0.4 implemented API.
+# Its JWT declaration is outdated. See docs/PROJECTAGAIN_V04_INTEGRATION.md.
 openapi: 3.1.0
 info:
   title: Micro Asset Marketplace ↔ AI Agent Contract

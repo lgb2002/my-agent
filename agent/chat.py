@@ -73,6 +73,13 @@ def offline_intent(text, context):
     s = text.strip()
     listing = _listing_phrase(s, context)
     lowered = s.lower()
+    if any(x in s for x in ("다음 매물", "매물 다음", "다음 페이지", "다음 목록")):
+        nxt = context.get("listing_next_cursor")
+        if nxt is None:
+            return "help", {"hint": "조회할 다음 페이지가 없어요. 새로운 매물을 검색해 주세요."}
+        return "search_listings", {"query": context.get("last_search_query", ""), "cursor": int(nxt)}
+    if any(x in s for x in ("내 구매 조건", "내 구매 취향", "내 구매 설정", "구매 조건 확인")):
+        return "get_buyer_preferences", {}
     if "작업" in s and any(x in s for x in ("내역", "최근", "기록", "목록")):
         return "get_recent_jobs", {}
     if "보고서" in s and any(x in s for x in ("제출", "등록", "올려")):
@@ -128,9 +135,12 @@ def _format_event(event: ToolEvent) -> str:
     lines = ["**{}** · {}".format(event.label, event.summary)]
     if event.name == "search_listings":
         for i, x in enumerate(d.get("listings", [])[:6], 1):
-            lines.append("{}. **{}** · {:,}원 · {}".format(i, x["title"], x["price_krw"], ", ".join(x.get("tech_stack", []))))
+            price = "{:,}원".format(x["price_krw"]) if isinstance(x.get("price_krw"), int) else "가격 미확인"
+            lines.append("{}. **{}** · {} · {}".format(i, x["title"], price, ", ".join(x.get("tech_stack") or []) or "기술 정보 미확인"))
         if d.get("listings"):
             lines.append("원하는 매물을 골라 '1번 매물 실사해줘'라고 말해줘.")
+        if d.get("next_cursor") is not None:
+            lines.append("더 확인하려면 **다음 매물 보여줘**라고 말해줘.")
     elif event.name == "recommend_listings":
         for i, x in enumerate(d.get("ranked", [])[:6], 1):
             lines.append("{}. **{}** · {:,}원 · 점수 {} (규칙 기반)".format(i, x["title"], x["price_krw"], x["score"]))
@@ -144,7 +154,10 @@ def _format_event(event: ToolEvent) -> str:
             lines.append("- {} · {}".format(x.get("finding_id", "?"), str(x.get("title", ""))[:170]))
     elif event.name == "list_offers":
         for x in d.get("offers", [])[:8]:
-            lines.append("- **{:,.0f}원** · {} · ID `{}`".format(x["price_krw"], x["status"], x["id"]))
+            amount = "{:,}원".format(x["price_krw"]) if isinstance(x.get("price_krw"), int) else "금액 미확인"
+            lines.append("- **{}** · {} · ID `{}`".format(amount, x.get("status") or "상태 미확인", x.get("id") or "미확인"))
+    elif event.name == "get_buyer_preferences":
+        lines.append("플랫폼에 저장된 구매 조건을 조회했어요. 필요한 사항은 연결된 계정 권한을 확인해줘.")
     elif event.name == "get_recent_jobs":
         for x in d.get("jobs", [])[:8]:
             lines.append("- {} · {} · `{}`".format(x["task_type"], x["status"], x["id"][:8]))

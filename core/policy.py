@@ -32,7 +32,7 @@ def recommendation(listings, preferences, demo_only=True):
     max_cost = preferences.get('max_monthly_cost_krw')
     skill = preferences['skill_level']
     risk = preferences['risk_tolerance']
-    preferred = set(s.lower() for s in preferences.get('preferred_tech_stack', []))
+    preferred = set(s.lower() for s in (preferences.get('preferred_tech_stack') or []) if isinstance(s, str))
     difficulty = {'NONE': 0, 'BASIC': 1, 'INTERMEDIATE': 2, 'ADVANCED': 3}
     excluded = []
     ranked = []
@@ -40,26 +40,32 @@ def recommendation(listings, preferences, demo_only=True):
         reasons_excluded = []
         if listing.get('status') != 'ACTIVE' or (demo_only and not listing.get('is_demo', False)):
             reasons_excluded.append('비활성 또는 허용되지 않은 매물')
-        if listing['price_krw'] > max_budget or listing['price_krw'] < min_budget:
+        price = listing.get('price_krw')
+        if isinstance(price, bool) or not isinstance(price, int) or price < 0:
+            reasons_excluded.append('가격 정보 누락 또는 형식 오류')
+            price = None
+        if price is not None and (price > max_budget or price < min_budget):
             reasons_excluded.append('예산 범위 밖')
         cost = listing.get('monthly_cost_estimate_krw')
-        if max_cost is not None and cost is not None and cost > max_cost:
+        if max_cost is not None and isinstance(cost, (int, float)) and cost > max_cost:
             reasons_excluded.append('월 운영비 상한 초과')
-        known_defects = listing.get('known_defects') or []
+        known_value = listing.get('known_defects')
+        known_defects = [str(x) for x in known_value if x is not None] if isinstance(known_value, list) else []
         if risk == 'LOW' and any('유료 외부 API 비용' in d for d in known_defects):
             reasons_excluded.append('저위험 조건에 부적합한 고비용 결함')
         if reasons_excluded:
             excluded.append({'listing_id': listing['id'], 'reasons': reasons_excluded})
             continue
-        stack = set(s.lower() for s in listing.get('tech_stack', []))
+        raw_stack = listing.get('tech_stack')
+        stack = set(s.lower() for s in raw_stack if isinstance(s, str)) if isinstance(raw_stack, list) else set()
         stack_match = bool(preferred & stack) if preferred else True
-        complicated = bool({'react', 'kubernetes', 'next.js'} & stack) or listing['category'] in ('saas', 'ai_agent')
+        complicated = bool({'react', 'kubernetes', 'next.js'} & stack) or str(listing.get('category') or '').lower() in ('saas', 'ai_agent')
         possible = not complicated or difficulty.get(skill, 0) >= 2
         verified = listing.get('verification_status') in ('STATIC_CHECKED', 'EXECUTION_CHECKED')
         repair_easy = len(known_defects) == 0
         score = (35 if stack_match else 12) + (30 if possible else 8) + (20 if verified else 5) + (15 if repair_easy else 4)
         reasons = []
-        if listing['price_krw'] <= max_budget:
+        if price is not None and price <= max_budget:
             reasons.append('예산 상한 이내({:,}원)'.format(listing['price_krw']))
         if stack_match:
             reasons.append('선호 기술과 일치')
@@ -74,11 +80,11 @@ def recommendation(listings, preferences, demo_only=True):
             risks.append('운영 및 권리 이전 여부 미검증')
         if cost is None:
             risks.append('월 운영비 자료 없음')
-        ranked.append({'listing_id': listing['id'], 'title': listing['title'],
-                       'price_krw': listing['price_krw'], 'score': score,
+        ranked.append({'listing_id': listing['id'], 'title': listing.get('title') or '제목 미확인',
+                       'price_krw': price, 'score': score,
                        'reasons': reasons[:3], 'risks': risks, 'verified': verified,
-                       'sale_rights_type': listing['sale_rights_type'],
-                       'lifecycle_status': listing['lifecycle_status'],
+                       'sale_rights_type': listing.get('sale_rights_type') or '미확인',
+                       'lifecycle_status': listing.get('lifecycle_status') or '미확인',
                        'observed_vs_inferred': '가격/스택/고지결함: 판매자 정보, 점수/운영 난이도: 규칙 기반 추정'})
     ranked.sort(key=lambda i: (-i['score'], i['price_krw'], i['listing_id']))
     return {'ranked': ranked, 'excluded': excluded, 'count': len(ranked),
@@ -87,9 +93,12 @@ def recommendation(listings, preferences, demo_only=True):
 
 def metadata_findings(listing):
     findings = []
-    for i, defect in enumerate(listing.get('known_defects') or [], 1):
+    known_defects = listing.get('known_defects')
+    if not isinstance(known_defects, list):
+        known_defects = []
+    for i, defect in enumerate(known_defects, 1):
         findings.append({'finding_id': 'SELLER-{:03d}'.format(i), 'severity': 'MEDIUM',
-                         'title': '판매자 고지 결함: ' + defect[:140], 'status': 'INFERRED',
+                         'title': '판매자 고지 결함: ' + str(defect)[:140], 'status': 'INFERRED',
                          'evidence_refs': ['listing://{}/known_defects/{}'.format(listing['id'], i-1)],
                          'recommendation': '증빙 파일·재현 절차를 요청하세요. 고지 내용은 독립 검증되지 않았습니다.'})
     findings.append({'finding_id': 'SCOPE-001', 'severity': 'INFO',

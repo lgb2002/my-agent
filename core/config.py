@@ -16,7 +16,10 @@ DEMO_SELLER_TOKEN = 'demo-seller-token'
 
 AGENT_MODE = os.environ.get('AGENT_MODE', 'mock').strip().lower()
 MARKETPLACE_BASE_URL = os.environ.get('MARKETPLACE_API_URL', os.environ.get('MARKETPLACE_BASE_URL', '')).strip().rstrip('/')
+# Kept for backward-compatible environment parsing only. Never use this shared secret
+# for public visitors: each platform user must supply their own short-lived grant.
 MARKETPLACE_API_KEY = os.environ.get('MARKETPLACE_API_KEY', '').strip()
+MARKETPLACE_INCLUDE_DEMO = os.environ.get('MARKETPLACE_INCLUDE_DEMO', 'false').lower() in ('true', '1', 'yes')
 MARKETPLACE_AUTH_SCHEME = os.environ.get('MARKETPLACE_AUTH_SCHEME', 'bearer').strip().lower()
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '').strip()
 OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-4.1-mini').strip()
@@ -33,13 +36,13 @@ def marketplace_config_error():
         return None
     if AGENT_MODE != 'live':
         return 'AGENT_MODE는 mock 또는 live만 허용됩니다.'
-    if not MARKETPLACE_BASE_URL or not MARKETPLACE_API_KEY:
-        return '실플랫폼 URL과 발급된 인증키가 필요합니다.'
-    if MARKETPLACE_AUTH_SCHEME not in ('bearer', 'x-api-key'):
-        return '인증 헤더 방식은 bearer 또는 x-api-key여야 합니다.'
+    if not MARKETPLACE_BASE_URL:
+        return '플랫폼 HTTPS 주소를 설정해 주세요. 공개 매물 조회는 토큰이 필요하지 않습니다.'
+    if MARKETPLACE_AUTH_SCHEME != 'bearer':
+        return 'ProjectAgain 위임 토큰은 Bearer 방식만 지원합니다.'
     parsed = urlparse(MARKETPLACE_BASE_URL)
-    if parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
-        return '실플랫폼 API는 자격 정보 없는 https:// URL이어야 합니다.'
+    if parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path not in ('', '/', '/api/v1', '/api/v1/'):
+        return '플랫폼 API 주소는 https://호스트 형태여야 합니다. 경로·자격 정보·쿼리를 제외해 주세요.'
     if parsed.hostname in ('localhost','127.0.0.1','::1'):
         return '실플랫폼에는 외부 HTTPS 주소를 입력하세요.'
     return None
