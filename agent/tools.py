@@ -30,13 +30,16 @@ TOOL_DEFINITIONS = [
         "type": "function", "function": {
             "name": "recommend_listings", "description": "구매 예산, 기술 수준 및 위험 허용도에 따라 매물을 규칙 기반으로 평가하고 추천 작업을 저장합니다.",
             "parameters": {"type": "object", "properties": {
-                "max_budget_krw": {"type": "integer", "description": "원화 예산 상한, 모르면 1000000"},
-                "max_monthly_cost_krw": {"type": "integer", "description": "월 운영비 상한, 모르면 30000"},
+                "max_budget_krw": {"type": "integer", "description": "사용자가 실제로 제시한 원화 예산 상한"},
+                "max_monthly_cost_krw": {"type": "integer", "description": "사용자가 제시한 월 운영비 상한. 없으면 생략"},
                 "skill_level": {"type": "string", "enum": ["NONE", "BASIC", "INTERMEDIATE", "ADVANCED"]},
                 "risk_tolerance": {"type": "string", "enum": ["LOW", "MEDIUM", "HIGH"]},
                 "preferred_tech_stack": {"type": "array", "items": {"type": "string"}},
-                "objective": {"type": "string", "description": "사용자의 구매 목적"}},
-                "required": ["max_budget_krw"]},
+                "objective": {"type": "string", "description": "사용자에게 확인한 구매 목적"},
+                "require_preferred_stack": {"type": "boolean", "description": "선호 기술을 필수로 요구하는지"},
+                "preferred_categories": {"type": "array", "items": {"type": "string"}, "description": "요구한 프로젝트 유형"},
+                "max_results": {"type": "integer", "description": "최대 표시 후보 1~5, 기본 3"}},
+                "required": ["max_budget_krw", "objective", "skill_level", "risk_tolerance"]},
         },
     },
     {
@@ -261,33 +264,52 @@ class ToolDispatcher:
                     else:
                         summary = "조회 성공 · 현재 조건에 0건입니다."
             elif name == "recommend_listings":
-                budget = int(args.get("max_budget_krw", 1000000))
+                # Always check that the user supplied or accepted these fields.
+                # Model-generated parameters alone must not bypass chat intake.
+                # One recommendation run per explicit user-completed intake.
+                # Never reuse this authorization for unsolicited model tool calls.
+                confirmed = self.context.pop('confirmed_recommendation', None)
+                if not isinstance(confirmed, dict) or any(not confirmed.get(field) for field in
+                        ('objective', 'max_budget_krw', 'skill_level', 'risk_tolerance')):
+                    raise ValueError('맞춤 추천 전에 구매 목적, 예산, 개발 수준, 위험 허용도를 확인해야 해요.')
+                budget = int(confirmed['max_budget_krw'])
                 if not 0 < budget <= 1000000000:
-                    raise ValueError("구매 예산은 1원~10억원 사이로 지정해줘.")
-                max_cost = int(args.get("max_monthly_cost_krw", 30000))
-                if not 0 <= max_cost <= 100000000:
-                    raise ValueError("월 운영비 상한을 확인해줘.")
-                skill = args.get("skill_level", "BASIC")
-                risk = args.get("risk_tolerance", "MEDIUM")
-                if skill not in ("NONE", "BASIC", "INTERMEDIATE", "ADVANCED") or risk not in ("LOW", "MEDIUM", "HIGH"):
-                    raise ValueError("기술 수준 또는 위험 허용도가 올바르지 않아요.")
-                tech = args.get("preferred_tech_stack", [])
+                    raise ValueError('구매 예산은 1원~10억원 사이로 지정해줘.')
+                max_cost = confirmed.get('max_monthly_cost_krw')
+                if max_cost is not None:
+                    max_cost = int(max_cost)
+                    if not 0 <= max_cost <= 100000000:
+                        raise ValueError('월 운영비 상한을 확인해줘.')
+                skill = confirmed['skill_level']
+                risk = confirmed['risk_tolerance']
+                if skill not in ('NONE', 'BASIC', 'INTERMEDIATE', 'ADVANCED') or risk not in ('LOW', 'MEDIUM', 'HIGH'):
+                    raise ValueError('기술 수준 또는 위험 허용도가 올바르지 않아요.')
+                tech = confirmed.get('preferred_tech_stack') or []
                 if not isinstance(tech, list) or len(tech) > 10 or any(not isinstance(t, str) or len(t) > 40 for t in tech):
-                    raise ValueError("선호 기술은 최대 10개의 이름으로 입력해줘.")
-                objective = str(args.get("objective") or "프로젝트 인수 및 활용")[:80]
-                prefs = {"max_budget_krw": budget, "min_budget_krw": 0,
-                         "max_monthly_cost_krw": max_cost, "skill_level": skill,
-                         "risk_tolerance": risk, "objectives": [objective], "preferred_tech_stack": tech}
-                job = self.request("POST", "/api/agent/v1/jobs", {"task_type": "RECOMMEND", "preferences": prefs}, write=True)
-                full = self.request("GET", "/api/agent/v1/jobs/" + job["job_id"])
-                self.context["last_job_id"] = job["job_id"]
-                ranked = (full.get("result") or {}).get("ranked", [])
-                self.context["recent_listings"] = [{"id": x["listing_id"], "title": x["title"]} for x in ranked]
-                self.context["listing_next_cursor"] = None
-                self.context["last_search_query"] = ""
-                data = {"job_id": job["job_id"], "ranked": ranked, "excluded": (full.get("result") or {}).get("excluded", []),
-                        "criteria": prefs, "status": full["status"]}
-                summary = "조건을 적용해 {}개 후보를 추렸어요. 점수는 규칙 기반 추정이며 수익성 보증은 아니에요.".format(len(ranked))
+                    raise ValueError('선호 기술은 최대 10개의 이름으로 입력해줘.')
+                objective = str(confirmed['objective'])[:90]
+                prefs = {'max_budget_krw': budget, 'min_budget_krw': 0,
+                         'max_monthly_cost_krw': max_cost, 'skill_level': skill,
+                         'risk_tolerance': risk, 'objectives': [objective],
+                         'preferred_tech_stack': tech,
+                         'require_preferred_stack': bool(confirmed.get('require_preferred_stack')),
+                         'preferred_categories': confirmed.get('preferred_categories', []),
+                         'max_results': 3}
+                job = self.request('POST', '/api/agent/v1/jobs', {'task_type': 'RECOMMEND', 'preferences': prefs}, write=True)
+                full = self.request('GET', '/api/agent/v1/jobs/' + job['job_id'])
+                self.context['last_job_id'] = job['job_id']
+                result = full.get('result') or {}
+                ranked = result.get('ranked', [])
+                self.context['recent_listings'] = [{'id': x['listing_id'], 'title': x['title']} for x in ranked]
+                self.context['listing_next_cursor'] = None
+                self.context['last_search_query'] = ''
+                data = {'job_id': job['job_id'], 'ranked': ranked,
+                        'excluded': result.get('excluded', []),
+                        'eligible_count': result.get('eligible_count', len(ranked)),
+                        'criteria': prefs, 'status': full['status']}
+                summary = ('맞춤 조건에 맞는 후보가 없습니다. 필요한 조건만 완화해 다시 추천받을 수 있어요.'
+                           if not ranked else '조건에 맞는 후보 {}건 중 상위 {}건을 보여드려요.'.format(
+                               data['eligible_count'], len(ranked)))
             elif name == "inspect_listing":
                 listing = self._listing(args.get("listing"))
                 job = self.request("POST", "/api/agent/v1/jobs", {"task_type": "INSPECT_METADATA", "listing_id": listing["id"]}, write=True)

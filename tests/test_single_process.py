@@ -224,11 +224,19 @@ class ChatFirstToolTest(unittest.TestCase):
 
     def test_recommendation_from_conversation(self):
         from agent.chat import ChatAgent
-        result = ChatAgent('구매자 B').reply('100만원 이하 Python 프로젝트 추천해줘', [], {})
+        ctx = {}
+        agent = ChatAgent('구매자 B')
+        first = agent.reply('100만원 이하 Python 프로젝트 추천해줘', [], ctx)
+        self.assertEqual(first['mode'], 'recommendation_intake')
+        self.assertFalse(first['events'])  # Never recommend before gathering missing fields.
+        agent.reply('개발 학습이 목적이야', [], ctx)
+        agent.reply('초보야', [], ctx)
+        result = agent.reply('위험은 보수적으로', [], ctx)
         self.assertEqual(result['events'][0]['name'], 'recommend_listings')
         self.assertTrue(result['events'][0]['success'])
         self.assertTrue(all(x['price_krw'] <= 1000000 for x in result['events'][0]['data']['ranked']))
-        self.assertEqual(result['mode'], 'offline')
+        self.assertLessEqual(len(result['events'][0]['data']['ranked']), 3)
+        self.assertEqual(result['mode'], 'recommendation')
 
     def test_chat_prepares_offer_but_never_sends_without_buttons(self):
         from agent.chat import ChatAgent

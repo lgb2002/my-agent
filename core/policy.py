@@ -33,6 +33,10 @@ def recommendation(listings, preferences, demo_only=True):
     skill = preferences['skill_level']
     risk = preferences['risk_tolerance']
     preferred = set(s.lower() for s in (preferences.get('preferred_tech_stack') or []) if isinstance(s, str))
+    require_stack = bool(preferences.get('require_preferred_stack', False))
+    categories = set(x.lower() for x in (preferences.get('preferred_categories') or []) if isinstance(x, str))
+    objective = ' '.join(str(x) for x in (preferences.get('objectives') or [])).lower()
+    max_results = max(1, min(5, int(preferences.get('max_results') or 3)))
     difficulty = {'NONE': 0, 'BASIC': 1, 'INTERMEDIATE': 2, 'ADVANCED': 3}
     excluded = []
     ranked = []
@@ -49,6 +53,12 @@ def recommendation(listings, preferences, demo_only=True):
         cost = listing.get('monthly_cost_estimate_krw')
         if max_cost is not None and isinstance(cost, (int, float)) and cost > max_cost:
             reasons_excluded.append('월 운영비 상한 초과')
+        raw_stack = listing.get('tech_stack')
+        stack = set(s.lower() for s in raw_stack if isinstance(s, str)) if isinstance(raw_stack, list) else set()
+        if require_stack and preferred and not preferred.intersection(stack):
+            reasons_excluded.append('필수 기술 조건 불일치')
+        if categories and str(listing.get('category') or '').lower() not in categories:
+            reasons_excluded.append('원하는 프로젝트 유형 불일치')
         known_value = listing.get('known_defects')
         known_defects = [str(x) for x in known_value if x is not None] if isinstance(known_value, list) else []
         if risk == 'LOW' and any('유료 외부 API 비용' in d for d in known_defects):
@@ -56,14 +66,30 @@ def recommendation(listings, preferences, demo_only=True):
         if reasons_excluded:
             excluded.append({'listing_id': listing['id'], 'reasons': reasons_excluded})
             continue
-        raw_stack = listing.get('tech_stack')
-        stack = set(s.lower() for s in raw_stack if isinstance(s, str)) if isinstance(raw_stack, list) else set()
         stack_match = bool(preferred & stack) if preferred else True
         complicated = bool({'react', 'kubernetes', 'next.js'} & stack) or str(listing.get('category') or '').lower() in ('saas', 'ai_agent')
         possible = not complicated or difficulty.get(skill, 0) >= 2
         verified = listing.get('verification_status') in ('STATIC_CHECKED', 'EXECUTION_CHECKED')
         repair_easy = len(known_defects) == 0
         score = (35 if stack_match else 12) + (30 if possible else 8) + (20 if verified else 5) + (15 if repair_easy else 4)
+        # Buying purpose matters. Never equate seller revenue claims with verified
+        # profit, and never claim that likely difficulty is objectively established.
+        has_revenue = listing.get('has_revenue') is True
+        revenue_verified = str(listing.get('revenue_claim_verification') or '').upper() in (
+            'VERIFIED', 'DOCUMENT_VERIFIED', 'ADMIN_VERIFIED')
+        lifecycle = str(listing.get('lifecycle_status') or '').upper()
+        rights = str(listing.get('sale_rights_type') or '').upper()
+        if '학습' in objective or '포트폴리오' in objective:
+            score += 12 if possible else -8
+            if isinstance(cost, (int, float)) and cost == 0:
+                score += 5
+        elif '수익' in objective or '매출' in objective:
+            score += 20 if has_revenue and revenue_verified else (-7 if not has_revenue else 0)
+        elif '운영' in objective:
+            score += 12 if lifecycle in ('ACTIVE', 'LIVE', 'OPERATING', 'LAUNCHED') else -8
+        elif '재판매' in objective:
+            score += 15 if rights == 'FULL_IP_ASSIGNMENT' else -12
+
         reasons = []
         if price is not None and price <= max_budget:
             reasons.append('예산 상한 이내({:,}원)'.format(listing['price_krw']))
@@ -72,6 +98,8 @@ def recommendation(listings, preferences, demo_only=True):
         if possible:
             reasons.append('현재 기술 수준에서 상대적으로 관리 가능하다고 추정')
         risks = []
+        if ('수익' in objective or '매출' in objective) and not (has_revenue and revenue_verified):
+            risks.append('검증된 수익 자료가 확인되지 않음 · 수익을 보장할 수 없습니다')
         if not possible:
             risks.append('기술 수준 대비 복잡도가 높을 가능성')
         if known_defects:
@@ -87,7 +115,10 @@ def recommendation(listings, preferences, demo_only=True):
                        'lifecycle_status': listing.get('lifecycle_status') or '미확인',
                        'observed_vs_inferred': '가격/스택/고지결함: 판매자 정보, 점수/운영 난이도: 규칙 기반 추정'})
     ranked.sort(key=lambda i: (-i['score'], i['price_krw'], i['listing_id']))
+    eligible_count = len(ranked)
+    ranked = ranked[:max_results]
     return {'ranked': ranked, 'excluded': excluded, 'count': len(ranked),
+            'eligible_count': eligible_count,
             'rule_version': 'static-rules-v0.1', 'is_demo': demo_only}
 
 
