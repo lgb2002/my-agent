@@ -1,9 +1,9 @@
 {
-  "timestamp_utc": "2026-11-16T18:15:14.936143+00:00",
+  "timestamp_utc": "2026-11-17T01:14:19.051464+00:00",
   "python": "3.13.5",
   "os": "Linux-6.18.57-x86_64-with-glibc2.41",
-  "test_count": 161,
-  "passed": 161,
+  "test_count": 140,
+  "passed": 140,
   "failed": 0,
   "errors": 0,
   "skipped": 0,

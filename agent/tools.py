@@ -13,7 +13,6 @@ from typing import Any
 from urllib.parse import quote
 
 from agent.core import AgentError, AgentRuntime
-from core.config import AGENT_MODE
 from core.inspector import MAX_ARCHIVE_BYTES
 
 
@@ -52,7 +51,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "type": "function", "function": {
-            "name": "inspect_attached_zip", "description": "사용자가 직접 첨부한 ZIP을 정적 검사합니다. DEMO 판매자 본인 매물만 검사 가능합니다. 압축 해제/실행하지 않습니다.",
+            "name": "inspect_attached_zip", "description": "판매자가 자신의 매물에 첨부할 ZIP을 로컬에서 정적 검사합니다. 플랫폼에 파일이나 보고서를 전송하지 않습니다.",
             "parameters": {"type": "object", "properties": {
                 "listing": {"type": "string", "description": "판매자 본인 매물 UUID/제목/순번"}},
                 "required": ["listing"]},
@@ -68,7 +67,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "type": "function", "function": {
-            "name": "prepare_offer", "description": "구매자가 DEMO 매물에 제안하려는 가격/메시지를 미리 작성합니다. 절대로 제안을 생성·전송하지 않고 화면에 확인 요청을 띄웁니다.",
+            "name": "prepare_offer", "description": "사용자가 구매 제안 초안을 준비합니다. 실제 플랫폼에 제출하려면 별도 버튼 확인과 offer:draft 권한이 필요합니다.",
             "parameters": {"type": "object", "properties": {
                 "listing": {"type": "string", "description": "매물 ID/제목/순번"},
                 "price_krw": {"type": "integer", "description": "제안 가격, 원 단위"},
@@ -78,44 +77,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "type": "function", "function": {
-            "name": "prepare_counter_offer", "description": "판매자가 기존 구매자 제안에 역제안을 준비합니다. 전송하지 않고 사용자 확인을 요청합니다.",
-            "parameters": {"type": "object", "properties": {
-                "offer_id": {"type": "string", "description": "기존 제안 UUID"},
-                "price_krw": {"type": "integer", "description": "역제안 금액"},
-                "message": {"type": "string"}},
-                "required": ["offer_id", "price_krw", "message"]},
-        },
-    },
-    {
-        "type": "function", "function": {
-            "name": "prepare_accept_offer", "description": "판매자의 역제안 수락을 위한 확인 요청을 준비합니다. 사용자의 확인 버튼 전에는 아무것도 실행하지 않습니다.",
-            "parameters": {"type": "object", "properties": {
-                "offer_id": {"type": "string", "description": "수락하려는 역제안의 UUID"}},
-                "required": ["offer_id"]},
-        },
-    },
-    {
-        "type": "function", "function": {
-            "name": "prepare_publish_report", "description": "판매자가 자신의 ZIP 정적 검사 보고서를 플랫폼 검토 대기로 제출하기 위한 확인 요청을 준비합니다. AI는 제출하지 않습니다.",
-            "parameters": {"type": "object", "properties": {
-                "job_id": {"type": "string", "description": "완료된 ZIP 정적 검사 작업 UUID"}},
-                "required": ["job_id"]},
-        },
-    },
-    {
-        "type": "function", "function": {
-            "name": "prepare_handover_check", "description": "판매자가 DEMO 인수인계 체크 항목을 기록할 수 있도록 내용 검토 요청을 준비합니다. 구매자 최종 확인을 주장하지 않습니다.",
-            "parameters": {"type": "object", "properties": {
-                "transaction_id": {"type": "string", "description": "DEMO 거래 UUID"},
-                "check_key": {"type": "string", "enum": ["source_manifest", "run_in_new_environment", "external_accounts", "ip_rights_review"]},
-                "result": {"type": "string", "enum": ["NOT_TESTED", "NEEDS_FIX", "SELLER_SUBMITTED"]},
-                "remarks": {"type": "string", "description": "검사 결과 또는 미확인 사항"}},
-                "required": ["transaction_id", "check_key", "result", "remarks"]},
-        },
-    },
-    {
-        "type": "function", "function": {
-            "name": "get_handover", "description": "DEMO 거래의 인수인계 점검 항목을 조회합니다.",
+            "name": "get_handover", "description": "플랫폼 거래의 인수인계 점검 항목을 조회합니다. 사용자 인증 필요.",
             "parameters": {"type": "object", "properties": {
                 "transaction_id": {"type": "string", "description": "거래 UUID"}},
                 "required": ["transaction_id"]},
@@ -138,13 +100,11 @@ TOOL_DEFINITIONS = [
 TOOL_LABELS = {
     "search_listings": "매물 검색", "recommend_listings": "맞춤 추천", "inspect_listing": "매물 실사",
     "inspect_attached_zip": "ZIP 정적 검사", "list_offers": "협상 현황 조회", "prepare_offer": "구매 제안 준비",
-    "prepare_counter_offer": "역제안 준비", "prepare_accept_offer": "수락 검토",
     "get_handover": "인수인계 조회", "get_recent_jobs": "작업 기록 조회",
-    "prepare_publish_report": "검사 보고서 제출 준비", "prepare_handover_check": "인계 기록 준비",
     "get_buyer_preferences": "내 구매 조건",
 }
 READ_TOOLS = {"search_listings", "list_offers", "get_handover", "get_recent_jobs"}
-STAGED_TOOLS = {"prepare_offer", "prepare_counter_offer", "prepare_accept_offer"}
+STAGED_TOOLS = {"prepare_offer"}
 
 
 @dataclass
@@ -257,12 +217,10 @@ class ToolDispatcher:
                 summary = "매물 {}건을 표시했어요.{}".format(len(items), " 다음 페이지가 있어요." if page.get("next_cursor") else "")
                 if not items:
                     from core.request_context import include_demo
-                    if AGENT_MODE == 'live' and not include_demo():
+                    if not include_demo():
                         summary = "조회 성공 · 현재 조건에 0건입니다. 시연 매물이 제외되었을 수 있어요. 사이드바의 '시연 매물 포함'을 켠 뒤 다시 조회해 주세요."
-                    elif AGENT_MODE == 'live':
-                        summary = "조회 성공 · 시연 매물 포함 조건에서도 0건입니다. ACTIVE 상태, 다른 필터 또는 플랫폼 연결 주소를 확인해 주세요."
                     else:
-                        summary = "조회 성공 · 현재 조건에 0건입니다."
+                        summary = "조회 성공 · 시연 매물 포함 조건에서도 0건입니다. ACTIVE 상태, 다른 필터 또는 플랫폼 연결 주소를 확인해 주세요."
             elif name == "recommend_listings":
                 # Always check that the user supplied or accepted these fields.
                 # Model-generated parameters alone must not bypass chat intake.
@@ -329,11 +287,9 @@ class ToolDispatcher:
                 data = {"listing_title": listing["title"], "job_id": job["job_id"], "report": full.get("result"), "status": full["status"]}
                 summary = "{}의 공개 자료를 점검했어요. 실행 검증·권리 검증은 미완료예요.".format(listing["title"])
             elif name == "inspect_attached_zip":
-                if AGENT_MODE != "mock" or self.actor_name != "판매자 A":
-                    raise ValueError("DEMO 판매자 본인만 ZIP 정적 검사를 실행할 수 있어요.")
                 raw = self.context.get("attachment_bytes")
                 if not isinstance(raw, bytes) or not raw:
-                    raise ValueError("먼저 사이드바에서 검사할 ZIP 파일을 첨부해줘.")
+                    raise ValueError("먼저 사이드바에서 검사할 ZIP 파일을 첨부해줘. 판매자 본인 매물만 검사할 수 있어.")
                 if len(raw) > MAX_ARCHIVE_BYTES:
                     raise ValueError("첨부 ZIP은 최대 4MB예요.")
                 listing = self._listing(args.get("listing"))
@@ -352,15 +308,11 @@ class ToolDispatcher:
                 summary = "{}의 협상 제안 {}건을 조회했어요.".format(listing["title"], len(offers))
             elif name == "prepare_offer":
                 from core.config import ENABLE_LIVE_DRAFTS
-                if AGENT_MODE == 'live' and not ENABLE_LIVE_DRAFTS:
+                if not ENABLE_LIVE_DRAFTS:
                     raise ValueError('플랫폼 초안 제출이 현재 비활성화되어 있습니다.')
-                if AGENT_MODE == 'mock' and self.actor_name != '구매자 B':
-                    raise ValueError('DEMO에서는 구매자만 제안 초안을 준비할 수 있습니다.')
-                live_principal = None
-                if AGENT_MODE == 'live':
-                    _client, live_principal = self.runtime.authenticated()
-                    if not str(live_principal.get('id') or '') or 'offer:draft' not in (live_principal.get('scopes') or []):
-                        raise ValueError('위임 토큰에 offer:draft 권한이 필요합니다.')
+                _client, live_principal = self.runtime.authenticated()
+                if not str(live_principal.get('id') or '') or 'offer:draft' not in (live_principal.get('scopes') or []):
+                    raise ValueError('위임 토큰에 offer:draft 권한이 필요합니다.')
                 listing = self._listing(args.get("listing"))
                 price = int(args.get("price_krw"))
                 if not 0 < price <= 1000000000:
@@ -368,7 +320,7 @@ class ToolDispatcher:
                 message = str(args.get("message") or "")[:1000].strip()
                 if not message:
                     raise ValueError("제안 메시지를 입력해줘.")
-                pending = {"kind": "live_offer_draft" if AGENT_MODE == 'live' else "offer_draft", "listing_id": listing["id"], "listing_title": listing["title"],
+                pending = {"kind": "live_offer_draft", "listing_id": listing["id"], "listing_title": listing["title"],
                            "price_krw": price, "message": message, "actor": self.actor_name, "token": uuid.uuid4().hex}
                 if live_principal:
                     if listing.get('seller_id') == live_principal['id']:
@@ -376,66 +328,6 @@ class ToolDispatcher:
                     pending['principal_id'] = live_principal['id']
                 data = {"listing_title": listing["title"], "listing_id": listing["id"], "price_krw": price, "message": message}
                 summary = "{}에 {:,}원 제안 내용을 준비했어요. 플랫폼 승인 전에는 제안이 전송되지 않아요.".format(listing["title"], price)
-            elif name == "prepare_counter_offer":
-                if AGENT_MODE != "mock" or self.actor_name != "판매자 A":
-                    raise ValueError("판매자 DEMO에서만 역제안을 준비할 수 있어요.")
-                offer, actor = self._offer(args.get("offer_id"))
-                if offer["seller_id"] != actor["id"] or offer["status"] != "PENDING":
-                    raise ValueError("본인이 받은 유효한 구매자 제안만 역제안할 수 있어요.")
-                price = int(args.get("price_krw"))
-                if not 0 < price <= 1000000000:
-                    raise ValueError("역제안 금액을 확인해줘.")
-                message = str(args.get("message") or "역제안을 제시합니다.")[:1000]
-                pending = {"kind": "counter_draft", "offer_id": offer["id"], "price_krw": price, "message": message,
-                           "actor": self.actor_name, "token": uuid.uuid4().hex}
-                data = {"offer_id": offer["id"], "price_krw": price, "message": message}
-                summary = "역제안 {:,}원을 준비했어요. 아래에서 확인할 수 있어요.".format(price)
-            elif name == "prepare_accept_offer":
-                if AGENT_MODE != "mock" or self.actor_name != "구매자 B":
-                    raise ValueError("구매자 DEMO에서만 역제안을 수락할 수 있어요.")
-                offer, actor = self._offer(args.get("offer_id"))
-                if offer["buyer_id"] != actor["id"] or offer["proposed_by"] != offer["seller_id"] or offer["status"] != "PENDING":
-                    raise ValueError("수락 가능한 판매자 역제안이 아니에요.")
-                pending = {"kind": "accept_offer", "offer_id": offer["id"], "version": offer["version"],
-                           "price_krw": offer["offered_price_krw"], "actor": self.actor_name, "token": uuid.uuid4().hex}
-                data = {"offer_id": offer["id"], "price_krw": offer["offered_price_krw"]}
-                summary = "{:,.0f}원 역제안 수락을 준비했어요. 사용자 확인 전에는 거래 상태를 변경하지 않아요.".format(offer["offered_price_krw"])
-            elif name == "prepare_publish_report":
-                if AGENT_MODE != "mock" or self.actor_name != "판매자 A":
-                    raise ValueError("DEMO 판매자만 검사 보고서 제출을 준비할 수 있어요.")
-                jid = str(args.get("job_id", "")).strip()
-                if jid in ("최근", "latest", "마지막"):
-                    jid = str(self.context.get("last_job_id") or "")
-                if not re.fullmatch(r"[0-9a-fA-F-]{36}", jid):
-                    raise ValueError("정적 ZIP 검사 작업 UUID를 알려줘.")
-                job = self.request("GET", "/api/agent/v1/jobs/" + quote(jid))
-                if job["task_type"] != "INSPECT_ZIP" or job["status"] != "PARTIAL":
-                    raise ValueError("제출할 수 있는 ZIP 정적 검사 결과가 아니에요.")
-                pending = {"kind": "publish_report", "job_id": jid, "listing_id": job["listing_id"],
-                           "actor": self.actor_name, "token": uuid.uuid4().hex}
-                data = {"job_id": jid, "verdict": (job.get("result") or {}).get("verdict", "UNVERIFIED")}
-                summary = "ZIP 정적 검사 보고서를 플랫폼 검토 대기로 제출할 준비가 됐어요. 직접 제출을 확인해줘."
-            elif name == "prepare_handover_check":
-                if AGENT_MODE != "mock" or self.actor_name != "판매자 A":
-                    raise ValueError("DEMO 판매자만 인수인계 제출 항목을 등록할 수 있어요.")
-                txid = str(args.get("transaction_id", "")).strip()
-                if txid in ("최근", "latest", "마지막"):
-                    txid = str(self.context.get("last_transaction_id") or "")
-                key_name = str(args.get("check_key", ""))
-                result_name = str(args.get("result", ""))
-                if not re.fullmatch(r"[0-9a-fA-F-]{36}", txid):
-                    raise ValueError("거래 UUID를 입력해줘.")
-                if key_name not in ("source_manifest", "run_in_new_environment", "external_accounts", "ip_rights_review"):
-                    raise ValueError("지원하지 않는 인수인계 점검 항목입니다.")
-                if result_name not in ("NOT_TESTED", "NEEDS_FIX", "SELLER_SUBMITTED"):
-                    raise ValueError("판매자가 구매자 확인 완료/검증 통과를 임의로 기록할 수는 없어요.")
-                remarks = str(args.get("remarks", ""))[:700]
-                # Access check: the seller must be a party to this transaction.
-                self.request("GET", "/api/agent/v1/transactions/" + quote(txid) + "/handover-checks")
-                pending = {"kind": "handover_check", "transaction_id": txid, "check_key": key_name,
-                           "result": result_name, "remarks": remarks, "actor": self.actor_name, "token": uuid.uuid4().hex}
-                data = {"transaction_id": txid, "check_key": key_name, "result": result_name, "remarks": remarks}
-                summary = "인수인계 항목을 준비했어요. 실제 등록 전 내용을 확인해줘."
             elif name == "get_handover":
                 txid = str(args.get("transaction_id", "")).strip()
                 if txid in ("최근", "latest", "마지막"):
@@ -463,63 +355,3 @@ class ToolDispatcher:
         except Exception as exc:
             # An uncaught network/DB error must not leak secrets or internal paths to the user/LLM.
             return ToolEvent(name, label, False, "도구 실행에 실패했어요. 연결 상태와 데이터베이스를 확인해줘."), None
-
-
-def perform_confirmed_action(actor: str, pending: dict, button: str) -> tuple[str, dict | None]:
-    """Only invoked by Streamlit button clicks, never called from model tool dispatch.
-
-    Each state transition re-checks actor and marketplace policy inside runtime.
-    """
-    if AGENT_MODE != "mock" or pending.get("actor") != actor:
-        raise ValueError("이 계정에서 실행할 수 없는 요청입니다.")
-    runtime = AgentRuntime(actor)
-    nonce = pending.get("token")
-    if not nonce or not isinstance(nonce, str):
-        raise ValueError("승인 세션이 유효하지 않습니다.")
-    kind = pending.get("kind")
-    if kind == "offer_draft" and button == "create":
-        path = "/api/agent/v1/negotiations/draft"
-        payload = {"listing_id": pending["listing_id"], "offered_price_krw": int(pending["price_krw"]),
-                   "message": pending["message"], "repair_requests": []}
-        result = runtime.request("POST", path, payload, None, True, write_key(actor, path, payload, nonce))
-        return "DEMO 제안 초안이 생성됐어요. 이제 원문을 검토하고 승인해야 해요.", {
-            "kind": "review_action", "action_id": result["id"], "actor": actor, "token": uuid.uuid4().hex}
-    if kind == "counter_draft" and button == "create":
-        path = "/api/agent/v1/negotiations/counter-draft"
-        payload = {"offer_id": pending["offer_id"], "offered_price_krw": int(pending["price_krw"]),
-                   "message": pending["message"]}
-        result = runtime.request("POST", path, payload, None, True, write_key(actor, path, payload, nonce))
-        return "DEMO 역제안 초안이 생성됐어요. 내용을 승인한 뒤 전송할 수 있어요.", {
-            "kind": "review_action", "action_id": result["id"], "actor": actor, "token": uuid.uuid4().hex}
-    if kind == "review_action" and button in {"approve", "reject", "execute"}:
-        action_id = pending["action_id"]
-        action = runtime.request("GET", "/api/agent/v1/negotiations/actions/" + action_id)
-        allowed = {"approve": "PENDING_APPROVAL", "reject": "PENDING_APPROVAL", "execute": "APPROVED"}
-        if action["status"] != allowed[button]:
-            raise ValueError("초안 상태가 변경됐어요. 현재 상태를 다시 확인해줘.")
-        path = "/api/agent/v1/negotiations/actions/" + action_id + "/" + button
-        result = runtime.request("POST", path, None, None, True, write_key(actor, path, {}, nonce))
-        if button == "approve":
-            return "초안을 승인했어요. 아직 제안이 전송되지는 않았어요.", pending
-        if button == "reject":
-            return "초안을 거절했어요. 상대방에게 전송되지 않았어요.", None
-        return "DEMO 플랫폼에 제안을 전송했어요. 제안 ID: " + str(result.get("created_offer_id", "미확인")), None
-    if kind == "publish_report" and button == "publish":
-        jid = pending["job_id"]
-        path = "/api/agent/v1/jobs/" + jid + "/publish"
-        result = runtime.request("POST", path, None, None, True, write_key(actor, path, {}, nonce))
-        return "DEMO 검토 대기로 보고서를 제출했어요. 상태: " + result["review_status"], None
-    if kind == "handover_check" and button == "record":
-        txid = pending["transaction_id"]
-        path = "/api/agent/v1/transactions/" + txid + "/handover-checks"
-        payload = {"check_key": pending["check_key"], "description": pending["check_key"],
-                   "result": pending["result"], "remarks": pending["remarks"], "evidence_refs": []}
-        result = runtime.request("POST", path, payload, None, True, write_key(actor, path, payload, nonce))
-        return "DEMO 인수인계 항목이 기록됐어요. 구매자 최종 확인과는 별개예요.", None
-    if kind == "accept_offer" and button == "accept":
-        oid = pending["offer_id"]
-        path = "/api/agent/v1/offers/" + oid + "/accept"
-        payload = {"expected_version": pending["version"]}
-        result = runtime.request("POST", path, payload, None, True, write_key(actor, path, payload, nonce))
-        return "DEMO 거래가 생성됐어요. 인수인계 ID: " + result["id"], None
-    raise ValueError("지원하지 않는 승인 요청입니다.")

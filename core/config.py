@@ -9,12 +9,6 @@ load_dotenv(ROOT / '.env', override=False)
 DATA_DIR = Path(os.environ.get('AGENT_DATA_DIR', str(ROOT / 'data'))).resolve()
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 AGENT_DB = str(DATA_DIR / 'agent_jobs.sqlite3')
-MOCK_DB = str(DATA_DIR / 'mock_marketplace.sqlite3')
-FIXTURE_PATH = ROOT / 'fixtures' / 'demo_contract.json'
-DEMO_BUYER_TOKEN = 'demo-buyer-token'
-DEMO_SELLER_TOKEN = 'demo-seller-token'
-
-AGENT_MODE = os.environ.get('AGENT_MODE', 'mock').strip().lower()
 MARKETPLACE_BASE_URL = os.environ.get('MARKETPLACE_API_URL', os.environ.get('MARKETPLACE_BASE_URL', '')).strip().rstrip('/')
 # Kept for backward-compatible environment parsing only. Never use this shared secret
 # for public visitors: each platform user must supply their own short-lived grant.
@@ -32,13 +26,10 @@ MAX_COST_KRW_PER_JOB = 0
 RULE_VERSION = 'risk-aware-rules-v0.2'
 
 def writes_enabled():
-    return AGENT_MODE == 'mock'
+    # Actual marketplace mutations are never executed by the agent.
+    return False
 
 def marketplace_config_error():
-    if AGENT_MODE == 'mock':
-        return None
-    if AGENT_MODE != 'live':
-        return 'AGENT_MODE는 mock 또는 live만 허용됩니다.'
     if not MARKETPLACE_BASE_URL:
         return '플랫폼 HTTPS 주소를 설정해 주세요. 공개 매물 조회는 토큰이 필요하지 않습니다.'
     if MARKETPLACE_AUTH_SCHEME != 'bearer':

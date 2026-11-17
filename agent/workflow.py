@@ -1,7 +1,7 @@
 """Bounded, resumable, evidence-first multi-step marketplace workflows.
 
 This module NEVER authorizes a marketplace mutation. Offer preparation only
-creates the existing Streamlit human-confirmation card in local DEMO mode.
+prepares an explicitly confirmed platform draft when the integration is enabled.
 It does not issue arbitrary model-selected tool calls or execute source code.
 """
 import copy
@@ -12,7 +12,6 @@ from typing import Literal
 from pydantic import BaseModel
 
 from agent.tools import ToolDispatcher, ToolEvent
-from core.config import AGENT_MODE
 from core.policy import metadata_findings
 from core.llm_service import contains_obvious_secret
 from agent.llm_intake import _amount_supported, _valid_quote
@@ -230,7 +229,7 @@ def execute_plan(plan, context, actor_name, *, recommendation_input=None,
             _end(plan, 'WAITING_INPUT', context)
             break
         from core.config import ENABLE_LIVE_DRAFTS
-        if kind == 'prepare_offer' and AGENT_MODE != 'mock' and not ENABLE_LIVE_DRAFTS:
+        if kind == 'prepare_offer' and not ENABLE_LIVE_DRAFTS:
             _mark(plan, step, 'BLOCKED', 'Live에서는 제안 생성·전송 불가', context)
             plan['issues'].append('실플랫폼에서 제안 준비 단계는 현재 읽기 전용 정책으로 차단됨')
             messages.append('**제안 단계 제한:** Live 모드는 읽기 전용이므로 거래 관련 초안을 생성하거나 전송하지 않았어.')
@@ -292,17 +291,8 @@ def execute_plan(plan, context, actor_name, *, recommendation_input=None,
                     continue
                 selected = plan['ranked'][0]
                 lid = selected['listing_id']
-                if AGENT_MODE == 'live':
-                    # No remote POST. Only public GET + local static metadata checks.
-                    listing = dispatcher._listing(lid)
-                    report = metadata_findings(listing)
-                    report['is_demo'] = False
-                    report['coverage'] = '공개 메타데이터 정적 검토; 소스 실행·권리 검증 미실시'
-                    event = ToolEvent('inspect_listing', '공개 자료 검토', True,
-                                      '{}의 공개 정보 점검을 수행했어.'.format(selected['title']),
-                                      {'listing_title': selected['title'], 'listing_id': lid, 'report': report, 'status': 'PARTIAL'})
-                else:
-                    event, _ = dispatcher.invoke('inspect_listing', {'listing': lid})
+                # Reuse the same audited read-only inspection tool as normal chat.
+                event, _ = dispatcher.invoke('inspect_listing', {'listing': lid})
                 events.append(event.to_dict())
                 if not event.success:
                     _mark(plan, step, 'FAILED', event.summary, context)
@@ -342,7 +332,7 @@ def execute_plan(plan, context, actor_name, *, recommendation_input=None,
                 if pending is not None:
                     pending['workflow_id'] = plan['id']
                 _mark(plan, step, 'WAITING_APPROVAL',
-                      '플랫폼 초안 제출 확인 대기' if AGENT_MODE == 'live' else '사용자 승인 버튼 대기 · 전송 안 됨', context)
+                      '플랫폼 초안 제출 확인 대기', context)
                 messages.append(_safe_summary(event, formatter))
             elif kind == 'verify':
                 result = verify_plan(plan)
@@ -387,11 +377,7 @@ def verify_plan(plan):
         elif steps['prepare_offer'] != 'WAITING_APPROVAL':
             issues.append('구매 제안 초안 준비가 완료되지 않음')
         else:
-            from core.config import AGENT_MODE as current_mode
-            if current_mode == 'live':
-                issues.append('플랫폼 초안 제출에는 사용자 확인이 필요하고, 승인·실행은 ProjectAgain 웹에서 별도로 수행')
-            else:
-                issues.append('제안은 사용자 확인 단계에 있으며 생성·전송되지 않음')
+            issues.append('플랫폼 초안 제출에는 사용자 확인이 필요하고, 승인·실행은 ProjectAgain 웹에서 별도로 수행')
     fulfilled = (not issues and all(state == 'COMPLETED' for key, state in steps.items()
                                       if key != 'verify'))
     # Never claim an entire acquisition workflow is complete merely because tools returned 200.

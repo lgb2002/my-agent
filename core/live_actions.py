@@ -6,7 +6,7 @@ remote 422/409 is reported, never silently retried as a new draft.
 """
 import uuid
 
-from core.config import AGENT_MODE, ENABLE_LIVE_DRAFTS
+from core.config import ENABLE_LIVE_DRAFTS
 from core.request_context import delegated_token
 from core.policy import payload_sha, expiration_iso, verify_amount
 from services.marketplace import LiveReadOnlyClient
@@ -15,7 +15,7 @@ from core.marketplace_client import MarketplaceError
 
 def submit_confirmed_draft(pending):
     """Invoke only on a human click; call exactly once per pending confirmation."""
-    if AGENT_MODE != 'live' or not ENABLE_LIVE_DRAFTS:
+    if not ENABLE_LIVE_DRAFTS:
         raise ValueError('실플랫폼 초안 제출은 현재 비활성화되어 있습니다.')
     if pending.get('kind') != 'live_offer_draft' or not delegated_token():
         raise ValueError('사용자별 위임 토큰과 확인된 초안이 필요합니다.')

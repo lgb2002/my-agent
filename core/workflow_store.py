@@ -13,7 +13,7 @@ import threading
 from contextlib import contextmanager
 from pathlib import Path
 
-from core.config import DATA_DIR, MARKETPLACE_BASE_URL, AGENT_MODE
+from core.config import DATA_DIR, MARKETPLACE_BASE_URL
 from core.llm_service import contains_obvious_secret
 
 _LOCK = threading.RLock()
@@ -50,9 +50,7 @@ def storage_health():
 
 
 def verified_owner(actor):
-    """Never use a visitor UUID, shared DEMO principal, or caller supplied ID."""
-    if AGENT_MODE != 'live':
-        return None
+    """Never use a visitor UUID, shared principal, or caller supplied ID."""
     from agent.core import AgentRuntime
     from core.request_context import delegated_token
     if not delegated_token():

@@ -32,7 +32,7 @@ class EntryDesignTests(unittest.TestCase):
         self.assertIn('st.chat_input(', source)
         self.assertIn('st.button(title, width="stretch"', source)
         self.assertIn('pending_prompt = prompt', source)
-        self.assertIn('perform_confirmed_action(', source)
+        self.assertIn('submit_confirmed_draft(', source)
         self.assertIn('st.rerun()', source)
 
     def test_important_keyboard_and_mobile_styles_are_present(self):

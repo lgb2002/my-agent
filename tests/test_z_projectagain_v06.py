@@ -8,12 +8,10 @@ import sys
 import tempfile
 from unittest.mock import patch
 
-# The demo service seeds a SQLite file at import time. When running this test
-# standalone, redirect it to a temporary directory before importing modules.
+# Isolate local job records; network calls are patched.
 _SANDBOX = tempfile.TemporaryDirectory(prefix='agent_v06_contract_')
 if 'core.config' not in sys.modules:
     os.environ['AGENT_DATA_DIR'] = _SANDBOX.name
-    os.environ['AGENT_MODE'] = 'mock'
     os.environ['ENABLE_OPENAI_CHAT'] = 'false'
 
 from core.marketplace_client import MarketplaceClient, MarketplaceError, origin_only
@@ -143,7 +141,7 @@ class ProjectAgainContractTest(unittest.TestCase):
         prefs = {'max_budget_krw':1000000, 'min_budget_krw':0,
                  'max_monthly_cost_krw':30000,'skill_level':'BASIC',
                  'risk_tolerance':'MEDIUM','objectives':[], 'preferred_tech_stack':['Python']}
-        result = recommendation([item], prefs, demo_only=False)
+        result = recommendation([item], prefs)
         self.assertEqual(result['count'], 1)
         self.assertEqual(metadata_findings(item)['verdict'], 'UNVERIFIED')
 

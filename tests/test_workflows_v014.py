@@ -58,7 +58,7 @@ def fake_tool(self, name, args):
     if name == 'prepare_offer':
         return ToolEvent(name, '구매 제안 준비', True, '승인 카드 생성',
                          {'listing_title':'프로젝트 1', 'price_krw':args['price_krw']}), {
-            'kind':'offer_draft','token':'fake','actor':'구매자 B', 'listing_id':ID1,
+            'kind':'live_offer_draft','token':'fake','actor':'구매자 B', 'listing_id':ID1,
             'price_krw':args['price_krw'], 'message':'승인 요청'}
     raise AssertionError('Unexpected tool')
 
@@ -99,7 +99,7 @@ class WorkflowTests(unittest.TestCase):
             calls.append(name)
             return fake_tool(self,name,args)
         ctx={'last_recommendation_profile':copy.deepcopy(PROFILE)}
-        with patch.object(ToolDispatcher,'invoke',autospec=True,side_effect=record):
+        with patch('core.config.ENABLE_LIVE_DRAFTS',True), patch.object(ToolDispatcher,'invoke',autospec=True,side_effect=record):
             r1=execute_plan(plan,ctx,'구매자 B',recommendation_input={
                 'args':copy.deepcopy(PROFILE),'qualitative_preferences':[]},formatter=_format_event)
             self.assertEqual(plan['status'],'WAITING_OFFER_PRICE')
@@ -111,10 +111,10 @@ class WorkflowTests(unittest.TestCase):
             r2=execute_plan(plan,ctx,'구매자 B',formatter=_format_event)
         self.assertEqual(calls,['recommend_listings','inspect_listing','prepare_offer'])
         self.assertIsNotNone(r2['pending'])
-        self.assertEqual(r2['pending']['kind'],'offer_draft')
+        self.assertEqual(r2['pending']['kind'],'live_offer_draft')
         self.assertEqual(plan['status'],'PARTIAL')
         self.assertFalse(plan['verified']['fulfilled'])
-        self.assertIn('제안은 사용자 확인 단계', ' '.join(plan['verified']['issues']))
+        self.assertIn('플랫폼 초안 제출', ' '.join(plan['verified']['issues']))
 
     def test_compare_incomplete_and_inspection_unverified_never_claim_success(self):
         from agent.workflow import create_plan,execute_plan
@@ -142,7 +142,7 @@ class WorkflowTests(unittest.TestCase):
         def record(self,name,args):
             calls.append(name)
             return fake_tool(self,name,args)
-        with patch.object(wf,'AGENT_MODE','live'),patch.object(ToolDispatcher,'invoke',autospec=True,side_effect=record):
+        with patch.object(ToolDispatcher,'invoke',autospec=True,side_effect=record):
             out=wf.execute_plan(plan,{'last_recommendation_profile':PROFILE},'ProjectAgain 사용자',
                                 recommendation_input={'args':PROFILE,'qualitative_preferences':[]},formatter=_format_event)
         self.assertEqual(calls,['recommend_listings'])
@@ -254,7 +254,7 @@ class WorkflowChatIntegrationTests(unittest.TestCase):
         # quote expects an exact fragment from this message
         first=first.replace('수익 목적으로','수익 목적')
         with patch.dict(sys.modules,{'langchain_core.messages':FakeLangchainMessages()}),             patch.multiple(chat, ENABLE_OPENAI_CHAT=True, OPENAI_API_KEY='dummy'):
-            with patch.object(ToolDispatcher,'invoke',autospec=True,side_effect=fake_tool):
+            with patch('core.config.ENABLE_LIVE_DRAFTS',True), patch.object(ToolDispatcher,'invoke',autospec=True,side_effect=fake_tool):
                 a=agent.reply(first,[],ctx)
                 self.assertIn('개발 경험',a['content'])
                 self.assertIn('workflow',ctx)

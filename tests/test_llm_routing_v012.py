@@ -186,7 +186,7 @@ class StructuredRoutingTest(unittest.TestCase):
             result=self.agent(model).reply('현재 등록된 매물 목록 보여줘',[],{})
         self.assertEqual(result['mode'],'openai')
         self.assertEqual(called,['search_listings'])
-        self.assertGreaterEqual(len(model.bound_tools),13)
+        self.assertEqual(len(model.bound_tools),9)
 
     def test_model_error_never_falls_back_to_regex(self):
         class FailedModel:

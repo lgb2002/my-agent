@@ -1,8 +1,7 @@
 """Streamlit의 동일 프로세스에서 실행되는 거래 지원 에이전트 업무 엔진.
 
 작업/판정/승인을 로컬 SQLite 및 정책 함수에 분리합니다. FastAPI 불필요.
-DEMO 상태 변경은 반드시 명시적 승인 + 원본 payload 해시 검증을 거치고,
-LIVE 모드에서는 Replit 플랫폼에 GET 요청만 전송합니다.
+매물은 ProjectAgain HTTPS API에서만 조회합니다. 모든 거래 승인·실행은 플랫폼에서 처리합니다.
 """
 import hashlib
 import re
@@ -11,7 +10,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 from core import db
 from core.config import (
-    AGENT_MODE, MARKETPLACE_BASE_URL, MARKETPLACE_AUTH_SCHEME,
+    MARKETPLACE_BASE_URL, MARKETPLACE_AUTH_SCHEME,
     OPENAI_MODEL, RULE_VERSION, MAX_MODEL_CALLS_PER_JOB, MAX_COST_KRW_PER_JOB,
     openai_chat_status, marketplace_config_error, writes_enabled,
 )
@@ -19,10 +18,9 @@ from core.inspector import inspect_zip, UnsafeArchive, MAX_ARCHIVE_BYTES
 from core.marketplace_client import MarketplaceError
 from core.request_context import delegated_token, visitor_id
 from core.policy import (
-    expiration_iso, metadata_findings, offer_payload, payload_sha, recommendation, verify_amount,
+    metadata_findings, recommendation,
 )
 from services.marketplace import client_for_actor
-from services.demo_marketplace import DemoMarketplaceError
 
 
 class AgentError(Exception):
@@ -73,16 +71,14 @@ class AgentRuntime:
         err = marketplace_config_error()
         if err:
             status = '설정 필요'
-        elif AGENT_MODE == 'mock':
-            status = '로컬 DEMO (서버 불필요)'
         else:
             status = '사용자별 조회 전용' if delegated_token() else '공개 매물 조회 전용'
         return {'status': 'ok', 'api_version': '0.3.0', 'marketplace': status,
-                'agent_mode': AGENT_MODE, 'rule_version': RULE_VERSION,
+                'agent_mode': 'live', 'rule_version': RULE_VERSION,
                 'max_model_calls_per_job': MAX_MODEL_CALLS_PER_JOB,
                 'max_cost_krw_per_job': MAX_COST_KRW_PER_JOB,
                 'platform_auth_scheme': MARKETPLACE_AUTH_SCHEME,
-                'platform_configured': AGENT_MODE == 'live' and err is None,
+                'platform_configured': err is None,
                 'writes_enabled': writes_enabled(), 'openai_chat': openai_chat_status(),
                 'openai_model': OPENAI_MODEL}
 
@@ -91,7 +87,7 @@ class AgentRuntime:
         if config_error:
             error(503, 'MARKETPLACE_CONFIG', config_error)
         client = client_for_actor(self.actor_name)
-        if AGENT_MODE == 'live' and not delegated_token():
+        if not delegated_token():
             # Anonymous access is limited to public listings; isolate local job history
             # using a random visitor identifier kept only in Streamlit session state.
             return client, {'id': 'visitor:' + (visitor_id() or str(uuid.uuid4())),
@@ -127,18 +123,18 @@ class AgentRuntime:
                 else:
                     raise ValueError('추천 조회가 10페이지 제한에 도달했습니다. 검색 조건을 좁혀 주세요.')
                 db.add_step(job_id, 'LISTINGS', 'PASS', '매물 {}개 조회'.format(len(items)))
-                result = recommendation(items, request['preferences'], demo_only=(AGENT_MODE == 'mock'))
-                result['is_demo'] = AGENT_MODE == 'mock'
+                result = recommendation(items, request['preferences'])
+                result['is_demo'] = False
                 db.add_step(job_id, 'RANK', 'PASS', '하드 필터/정적 규칙 기반 정렬')
                 db.set_status(job_id, 'SUCCEEDED', result)
             else:
                 listing = client.listing(listing_id)
                 result = metadata_findings(listing)
                 result['listing_id'] = listing_id
-                result['is_demo'] = AGENT_MODE == 'mock'
+                result['is_demo'] = bool(listing.get('is_demo', False))
                 db.add_step(job_id, 'INSPECT', 'NOT_TESTED', '소스 실행·법률 확인은 별도 절차 필요')
                 db.set_status(job_id, 'PARTIAL', result)
-        except (MarketplaceError, DemoMarketplaceError, ValueError, KeyError, TypeError) as exc:
+        except (MarketplaceError, ValueError, KeyError, TypeError) as exc:
             db.add_step(job_id, 'ERROR', 'FAIL', type(exc).__name__ + ': 처리 실패')
             db.set_status(job_id, 'FAILED', error='업무 처리 실패: ' + type(exc).__name__)
 
@@ -163,13 +159,15 @@ class AgentRuntime:
             self.process_job(jid, client, task, lid, payload)
         job = db.get_job(jid, actor['id'])
         return {'job_id': jid, 'status': job['status'], 'created': created,
-                'is_demo': AGENT_MODE == 'mock'}
+                'is_demo': False}
 
     def inspect_upload(self, client, actor, lid, raw, key):
-        require_write()
+        # Local static scan: no remote upload, no marketplace mutation.
         demand_key(key)
         if not isinstance(raw, bytes) or len(raw) > MAX_ARCHIVE_BYTES:
             error(413, 'ARCHIVE_TOO_LARGE', '4MB 이하 ZIP만 업로드할 수 있습니다.')
+        if not delegated_token() or actor.get('role') == 'PUBLIC':
+            error(401, 'AUTH_REQUIRED', '판매자 본인 인증 후 ZIP을 검사할 수 있습니다.')
         listing = client.listing(lid)
         if listing['seller_id'] != actor['id']:
             error(403, 'FORBIDDEN', '판매자 본인 매물만 검사할 수 있습니다.')
@@ -193,56 +191,6 @@ class AgentRuntime:
             db.set_status(jid, 'FAILED', error='위험한 ZIP이므로 차단: ' + str(exc))
         return {'job_id': jid, 'created': True}
 
-    def publish_inspection(self, client, actor, jid, key):
-        require_write()
-        demand_key(key)
-        job = db.get_job(jid, actor['id'])
-        if not job or job['task_type'] != 'INSPECT_ZIP' or job['status'] != 'PARTIAL':
-            error(422, 'INSPECTION_NOT_READY', '정적 ZIP 검사 결과가 없습니다.')
-        listing = client.listing(job['listing_id'])
-        if listing['seller_id'] != actor['id']:
-            error(403, 'FORBIDDEN', '판매자만 결과를 제출할 수 있습니다.')
-        result = job['result']
-        payload = {'report_type': 'STATIC', 'verdict': result['verdict'],
-                   'findings': result['findings'], 'evidence_refs': result['evidence_refs'],
-                   'source_version_sha256': result['source_version_sha256'], 'agent_job_id': jid}
-        return client.publish_report(job['listing_id'], payload, key)
-
-    def draft_offer(self, client, actor, payload, key):
-        require_write()
-        demand_key(key)
-        listing = client.listing(payload.get('listing_id', ''))
-        if listing['seller_id'] == actor['id']:
-            error(403, 'FORBIDDEN', '본인 매물에 제안할 수 없습니다.')
-        try:
-            content = offer_payload(listing, payload.get('offered_price_krw'),
-                                    payload.get('message',''), payload.get('repair_requests', []))
-        except (ValueError, TypeError) as exc:
-            error(422, 'INVALID_OFFER', str(exc))
-        return client.create_action({'action_type': 'SUBMIT_OFFER', 'resource_id': listing['id'],
-                                    'proposed_payload': content, 'payload_sha256': payload_sha(content),
-                                    'expires_at': expiration_iso()}, key)
-
-    def counter_offer(self, client, actor, payload, key):
-        require_write()
-        demand_key(key)
-        offer_id = payload.get('offer_id','')
-        offer = client.offer(offer_id)
-        if actor['id'] != offer['seller_id'] or offer['status'] != 'PENDING':
-            error(403, 'FORBIDDEN', '유효한 제안에 대해 판매자만 역제안 가능')
-        try:
-            verify_amount(payload.get('offered_price_krw'))
-        except ValueError as exc:
-            error(422, 'INVALID_PRICE', str(exc))
-        terms = {'handover_deadline_days': 7, 'seller_support_days': 1,
-                 'repair_requests': [], 'acceptance_criteria': ['구매자 별도 검수'],
-                 'message': str(payload.get('message','DEMO 역제안'))[:4000]}
-        content = {'offered_price_krw': payload['offered_price_krw'],
-                   'terms': terms, 'expires_at': expiration_iso(), 'expected_version': offer['version']}
-        return client.create_action({'action_type': 'COUNTER_OFFER', 'resource_id': offer_id,
-                                    'proposed_payload': content, 'payload_sha256': payload_sha(content),
-                                    'expires_at': expiration_iso()}, key)
-
     def assistant_chat(self, payload):
         if openai_chat_status() != 'ready':
             error(409, 'OPENAI_DISABLED', 'OpenAI가 비활성화되어 있거나 API 키가 없습니다.')
@@ -265,7 +213,7 @@ class AgentRuntime:
         except Exception:
             error(502, 'OPENAI_FAILED', 'OpenAI 호출 실패. 키·모델·연결 또는 사용량을 확인하세요.')
         return {'answer': result, 'model': OPENAI_MODEL, 'read_only': True,
-                'is_demo': AGENT_MODE == 'mock'}
+                'is_demo': False}
 
     def request(self, method, path, payload=None, body=None, write=False, key=None):
         """Dispatcher retains v0.2 UI route names, without any HTTP or server."""
@@ -320,47 +268,14 @@ class AgentRuntime:
                     db.set_status(jid, 'CANCELLED')
                     db.add_step(jid, 'CANCEL', 'CANCELLED', '사용자 취소')
                     return {'job_id': jid, 'status': 'CANCELLED'}
-                if len(tail) == 3 and tail[2] == 'publish' and method == 'POST':
-                    return self.publish_inspection(client, actor, jid, key)
             if tail == ['inspections','zip'] and method == 'POST':
                 lid = query.get('listing_id',[''])[0]
                 return self.inspect_upload(client, actor, lid, body, key)
-            if tail == ['negotiations','draft'] and method == 'POST':
-                return self.draft_offer(client, actor, payload or {}, key)
-            if tail == ['negotiations','counter-draft'] and method == 'POST':
-                return self.counter_offer(client, actor, payload or {}, key)
-            if len(tail) == 3 and tail[:2] == ['negotiations','actions'] and method == 'GET':
-                return client.action(tail[2])
-            if len(tail) == 4 and tail[:2] == ['negotiations','actions'] and method == 'POST':
-                require_write()
-                demand_key(key)
-                action_id, operation = tail[2], tail[3]
-                if operation == 'approve':
-                    return client.action_approve(action_id, key)
-                if operation == 'reject':
-                    return client.action_reject(action_id, key)
-                if operation == 'execute':
-                    return client.action_execute(action_id, key)
-                error(404, 'INVALID_OPERATION', '초안 동작 불가')
             if tail == ['offers'] and method == 'GET':
                 return client.offers(query.get('listing_id',[''])[0])
-            if len(tail) == 3 and tail[0] == 'offers' and tail[2] == 'accept' and method == 'POST':
-                require_write()
-                demand_key(key)
-                if not isinstance(payload, dict) or not isinstance(payload.get('expected_version'), int):
-                    error(422, 'VERSION_REQUIRED', 'expected_version 필수')
-                return client.accept_offer(tail[1], payload['expected_version'], key)
             if len(tail) == 3 and tail[0] == 'transactions' and tail[2] == 'handover-checks':
                 if method == 'GET':
                     return client.handover_checks(tail[1])
-                if method == 'POST':
-                    require_write()
-                    demand_key(key)
-                    if not isinstance(payload, dict) or payload.get('result') not in ('NOT_TESTED','NEEDS_FIX','SELLER_SUBMITTED'):
-                        error(422, 'INVALID_CHECK', '확인되지 않은 인수 완료 상태는 기록할 수 없습니다.')
-                    return client.create_handover_check(tail[1], payload, key)
             error(404, 'NOT_FOUND', '지원하지 않는 내부 작업')
-        except DemoMarketplaceError as exc:
-            raise AgentError(exc.status, exc.code, str(exc)) from None
         except MarketplaceError as exc:
             raise AgentError(exc.status, exc.code, str(exc)) from None

@@ -23,8 +23,8 @@ except Exception:
 
 from agent.chat import ChatAgent  # noqa: E402
 from agent.core import AgentError, AgentRuntime  # noqa: E402
-from agent.tools import TOOL_LABELS, perform_confirmed_action  # noqa: E402
-from core.config import AGENT_MODE, ENABLE_OPENAI_CHAT, OPENAI_API_KEY, OPENAI_MODEL, SHOW_DEVELOPER_TOOLS, marketplace_config_error  # noqa: E402
+from agent.tools import TOOL_LABELS  # noqa: E402
+from core.config import ENABLE_OPENAI_CHAT, OPENAI_API_KEY, OPENAI_MODEL, SHOW_DEVELOPER_TOOLS, marketplace_config_error  # noqa: E402
 from core.request_context import set_request_context  # noqa: E402
 from core.ai_usage import set_ai_identity, usage_snapshot, storage_kind as ai_usage_storage_kind  # noqa: E402
 from core.llm_service import contains_obvious_secret  # noqa: E402
@@ -204,103 +204,7 @@ def pending_ui(session, actor_name):
                 session['pending'] = None
                 st.rerun()
         return
-    if kind in ("offer_draft", "counter_draft"):
-        st.markdown("**{} · {:,}원**".format(
-            escape(pending.get("listing_title", "기존 제안 " + pending.get("offer_id", "")[:8])), pending["price_krw"]))
-        st.write(pending.get("message", ""))
-        st.caption("1단계: DEMO 초안 생성 · 아직 제안 전송 아님")
-        col_a, col_b = st.columns([1, 1])
-        create = col_a.button("초안 생성", type="primary", width="stretch", key="approve_create_" + pending["token"])
-        cancel = col_b.button("취소", width="stretch", key="approve_cancel_" + pending["token"])
-        if create:
-            confirmed(session, actor_name, "create")
-        if cancel:
-            session["pending"] = None
-            add_turn(session, "assistant", "요청을 취소했어요. 플랫폼에 전송된 내용은 없어요.")
-            st.rerun()
-    elif kind == "review_action":
-        try:
-            action = AgentRuntime(actor_name).request("GET", "/api/agent/v1/negotiations/actions/" + pending["action_id"])
-            st.markdown("**초안 종류:** {}   ·   **상태:** {}".format(action["action_type"], action["status"]))
-            with st.expander("승인할 정확한 내용과 SHA-256 보기", expanded=True):
-                st.json(action["proposed_payload"])
-                st.caption("SHA-256 · " + action["payload_sha256"])
-            if action["status"] == "PENDING_APPROVAL":
-                a, b = st.columns(2)
-                if a.button("내용 승인", type="primary", width="stretch", key="review_yes_" + pending["token"]):
-                    confirmed(session, actor_name, "approve")
-                if b.button("초안 거절", width="stretch", key="review_no_" + pending["token"]):
-                    confirmed(session, actor_name, "reject")
-            elif action["status"] == "APPROVED":
-                checked = st.checkbox("DEMO 플랫폼에 해당 초안이 전송되는 것에 동의해요.", key="execute_check_" + pending["token"])
-                if st.button("승인된 DEMO 제안 전송", type="primary", disabled=not checked,
-                             width="stretch", key="execute_" + pending["token"]):
-                    confirmed(session, actor_name, "execute")
-            else:
-                st.info("현재 상태: {}. 더 이상 실행할 단계가 없어요.".format(action["status"]))
-                if st.button("승인 카드 닫기", key="close_review_" + pending["token"]):
-                    session["pending"] = None
-                    st.rerun()
-        except AgentError:
-            st.error("이 초안을 조회할 수 없어요. 본인 계정과 상태를 확인해줘.")
-    elif kind == "publish_report":
-        st.markdown("**ZIP 정적 검사 보고서 제출** · 작업 ID `{}`".format(pending["job_id"]))
-        st.caption("DEMO 플랫폼의 검토 대기 상태로 등록됩니다. 검증 통과를 의미하지 않아요.")
-        a, b = st.columns(2)
-        if a.button("DEMO 보고서 제출", type="primary", width="stretch", key="publish_" + pending["token"]):
-            confirmed(session, actor_name, "publish")
-        if b.button("취소", width="stretch", key="publish_cancel_" + pending["token"]):
-            session["pending"] = None
-            st.rerun()
-    elif kind == "handover_check":
-        st.markdown("**인수인계 기록** · {} / {}".format(pending["check_key"], pending["result"]))
-        st.write(pending.get("remarks") or "비고 없음")
-        st.caption("기록은 판매자 제출 상태일 뿐, 구매자 인수 확인은 아닙니다.")
-        a, b = st.columns(2)
-        if a.button("DEMO 항목 기록", type="primary", width="stretch", key="handover_" + pending["token"]):
-            confirmed(session, actor_name, "record")
-        if b.button("취소", width="stretch", key="handover_cancel_" + pending["token"]):
-            session["pending"] = None
-            st.rerun()
-    elif kind == "accept_offer":
-        st.markdown("**판매자 역제안 수락 · {:,}원**".format(pending["price_krw"]))
-        st.caption("수락하면 가상 거래 상태가 만들어지며, 실제 결제나 계약은 진행하지 않아요.")
-        checked = st.checkbox("수락 금액과 DEMO 거래 생성에 동의해요.", key="accept_check_" + pending["token"])
-        a, b = st.columns(2)
-        if a.button("DEMO 역제안 수락", type="primary", disabled=not checked, width="stretch",
-                    key="accept_" + pending["token"]):
-            confirmed(session, actor_name, "accept")
-        if b.button("취소", width="stretch", key="accept_cancel_" + pending["token"]):
-            session["pending"] = None
-            st.rerun()
 
-
-def confirmed(session, actor, operation):
-    # This is ONLY wired to physical Streamlit buttons, never to ChatAgent.
-    try:
-        old_pending = session["pending"]
-        message, next_pending = perform_confirmed_action(actor, old_pending, operation)
-        if next_pending is not None and old_pending.get('workflow_id'):
-            next_pending['workflow_id'] = old_pending['workflow_id']
-        session["pending"] = next_pending
-        if operation == "accept":
-            found = re.search(r"[0-9a-fA-F-]{36}", message)
-            if found:
-                session["context"]["last_transaction_id"] = found.group(0)
-        plan = session.get('context', {}).get('workflow')
-        if plan and operation == 'execute' and old_pending.get('workflow_id') == plan.get('id'):
-            for step in plan.get('steps', []):
-                if step['key'] == 'prepare_offer' and step['status'] == 'WAITING_APPROVAL':
-                    step['status'], step['note'] = 'COMPLETED', 'DEMO 제안 전송 확인 · 사용자 버튼 실행'
-            plan['verified'] = verify_plan(plan)
-            plan['status'] = 'COMPLETED' if plan['verified']['fulfilled'] else 'PARTIAL'
-            _checkpoint(plan, session['context'])
-        add_turn(session, "assistant", "**요청 처리 완료** · " + message)
-        st.rerun()
-    except (AgentError, ValueError, KeyError) as exc:
-        st.error("확인 단계 처리 실패: " + str(exc)[:350])
-    except Exception:
-        st.error("확인 단계 처리 중 오류가 발생했어요. 상태를 다시 조회해줘.")
 
 
 # ── Sidebar: a short path to listings and optional account connection. ──
@@ -309,27 +213,20 @@ with st.sidebar:
     st.markdown('<div class="brand"><span class="brand-symbol">◈</span><span>ProjectAgain</span></div>',
                 unsafe_allow_html=True)
 
-    if AGENT_MODE == "mock":
-        actor = st.selectbox("체험할 역할", ["구매자 B", "판매자 A"])
-        token = ""
-        show_demo = True
-        st.caption("샌드박스 환경")
-    else:
-        actor = "ProjectAgain 사용자"
-        st.markdown('<div class="sidebar-heading">매물 보기</div>', unsafe_allow_html=True)
-        # First visit defaults to including demo listings, but each visitor
-        # can turn the filter off. New widget key avoids sticky old defaults.
-        show_demo = st.checkbox("시연 매물 포함", value=True, key="include_demo_v10")
-        with st.expander("내 계정 연결", expanded=False):
-            token = st.text_input(
-                "위임 토큰", type="password", key="user_grant_v06",
-                placeholder="12시간 위임 토큰",
-                help="개인 구매 조건이나 제안 내역 조회 시에만 필요합니다. 공개 매물은 토큰 없이 조회할 수 있어요.",
-            )
-            if token and st.button("연결 해제", key="disconnect_grant_v10", width="stretch"):
-                st.session_state["user_grant_v06"] = ""
-                st.rerun()
-        st.caption("계정 연결됨" if token else "공개 매물 조회 가능")
+    actor = "ProjectAgain 사용자"
+    st.markdown('<div class="sidebar-heading">매물 보기</div>', unsafe_allow_html=True)
+    # Platform-registered demo listings are a normal API filter, NOT a local sandbox.
+    show_demo = st.checkbox("시연 매물 포함", value=True, key="include_demo_v10")
+    with st.expander("내 계정 연결", expanded=False):
+        token = st.text_input(
+            "위임 토큰", type="password", key="user_grant_v06",
+            placeholder="12시간 위임 토큰",
+            help="개인 구매 조건이나 제안 내역 조회 시에만 필요합니다. 공개 매물은 토큰 없이 조회할 수 있어요.",
+        )
+        if token and st.button("연결 해제", key="disconnect_grant_v10", width="stretch"):
+            st.session_state["user_grant_v06"] = ""
+            st.rerun()
+    st.caption("계정 연결됨" if token else "공개 매물 조회 가능")
 
     # Shared Cloud Secrets grant must never be attached to public visitors.
     set_request_context(token=token, visitor_id=visitor, include_demo=show_demo)
@@ -337,7 +234,7 @@ with st.sidebar:
     # A shared deployment secret is never an end-user identity.
     ai_identity = None
     if ENABLE_OPENAI_CHAT and OPENAI_API_KEY:
-        if AGENT_MODE == 'live' and token:
+        if token:
             owner_id = verified_owner(actor)  # ProjectAgain /auth/me check
             if owner_id:
                 ai_identity = 'platform:' + owner_id
@@ -378,7 +275,7 @@ with st.sidebar:
         except (AttributeError, KeyError, TypeError):
             pass
     owner_scope = hashlib.sha256(token.encode("utf-8")).hexdigest()[:12] if token else visitor
-    scope = conversation_scope(AGENT_MODE, actor, owner_scope if AGENT_MODE == 'live' else 'demo')
+    scope = conversation_scope('live', actor, owner_scope)
     # Before v0.10, demo-filter switches created separate chat scopes.
     old_scopes = [scope + '::' + str(show_demo), scope + '::' + str(not show_demo)]
     current = get_session(scope, old_scopes)
@@ -395,7 +292,7 @@ with st.sidebar:
     with st.expander('내 작업 · 기억', expanded=False):
         consent_key = 'remember_workflow_v014_' + scope[-12:]
         consent = st.checkbox('확인한 조건과 작업 계획 저장', value=False,
-                              disabled=(AGENT_MODE != 'live' or not token), key=consent_key)
+                              disabled=not token, key=consent_key)
         account_owner = verified_owner(actor) if consent else None
         if consent and not account_owner:
             st.warning('사용자 위임 토큰을 확인하지 못해 저장하지 않았어.')
@@ -479,11 +376,10 @@ with st.sidebar:
         st.session_state["chat_sessions_v06"][scope] = {"turns": [], "context": {"recent_listings": []}, "pending": None}
         st.rerun()
 
-    if AGENT_MODE == "mock" and actor == "판매자 A":
-        with st.expander("ZIP 검사 파일", expanded=False):
-            uploaded = st.file_uploader("검사할 ZIP", type=["zip"], help="4MB 이하 · 압축 파일을 실행하지 않고 검사합니다.")
-    else:
-        uploaded = None
+    uploaded = None
+    if token:
+        with st.expander("ZIP 정적 검사", expanded=False):
+            uploaded = st.file_uploader("본인 매물의 ZIP 파일", type=["zip"], help="4MB 이하 · 서버에서 실행하지 않고 정적 검사합니다. 플랫폼에 업로드하지 않습니다.")
 
     # Tool discovery is part of the product, not a developer-only diagnostic.
     # Keep the index accessible after the first message without overwhelming
@@ -491,12 +387,10 @@ with st.sidebar:
     with st.expander("사용 가능한 도구 · {}개".format(len(TOOL_LABELS)), expanded=False):
         for key in ("search_listings", "recommend_listings", "inspect_listing", "get_buyer_preferences",
                     "list_offers", "get_handover", "get_recent_jobs", "inspect_attached_zip",
-                    "prepare_offer", "prepare_counter_offer", "prepare_accept_offer",
-                    "prepare_publish_report", "prepare_handover_check"):
+                    "prepare_offer"):
             if key in TOOL_LABELS:
                 st.caption("· " + TOOL_LABELS[key])
-        if AGENT_MODE == "live":
-            st.caption("실플랫폼의 거래 변경 도구는 안전을 위해 실행되지 않습니다.")
+        st.caption("실거래 승인·실행은 ProjectAgain 플랫폼에서만 할 수 있어요.")
 
     # Technical diagnostics remain optional; the basic tool index does not.
     if SHOW_DEVELOPER_TOOLS:
@@ -513,28 +407,27 @@ with st.sidebar:
         if current["turns"]:
             st.download_button("대화 기록 저장", json.dumps(current["turns"], ensure_ascii=False, indent=2),
                                file_name="projectagain_conversation.json", mime="application/json", width="stretch")
-        if AGENT_MODE == "live":
-            with st.expander("API 연결 진단", expanded=False):
-                if st.button("연결 상태 검사", key="diagnose_marketplace_v08", width="stretch"):
-                    config_error = marketplace_config_error()
-                    if config_error:
-                        st.session_state["live_diagnostics_v08"] = {"configuration_error": config_error}
-                    else:
-                        with st.spinner("연결 상태 확인 중..."):
-                            st.session_state["live_diagnostics_v08"] = run_diagnostics(
-                                MARKETPLACE_BASE_URL, token=token, include_demo=show_demo)
-                report = st.session_state.get("live_diagnostics_v08")
-                if report:
-                    if "configuration_error" in report:
-                        st.error(report["configuration_error"])
-                    else:
-                        for title, key in (("공개 매물", "public"), ("시연 포함", "with_demo"),
-                                           ("사용자 인증", "delegation")):
-                            entry = report[key]
-                            status = entry.get("http_status")
-                            count = " · {}건".format(entry["count"]) if entry.get("count") is not None else ""
-                            st.caption("{} · HTTP {}{} · {}".format(title, status if status is not None else "미확인", count, entry["detail"]))
-                        st.info(report["interpretation"])
+        with st.expander("API 연결 진단", expanded=False):
+            if st.button("연결 상태 검사", key="diagnose_marketplace_v08", width="stretch"):
+                config_error = marketplace_config_error()
+                if config_error:
+                    st.session_state["live_diagnostics_v08"] = {"configuration_error": config_error}
+                else:
+                    with st.spinner("연결 상태 확인 중..."):
+                        st.session_state["live_diagnostics_v08"] = run_diagnostics(
+                            MARKETPLACE_BASE_URL, token=token, include_demo=show_demo)
+            report = st.session_state.get("live_diagnostics_v08")
+            if report:
+                if "configuration_error" in report:
+                    st.error(report["configuration_error"])
+                else:
+                    for title, key in (("공개 매물", "public"), ("시연 포함", "with_demo"),
+                                       ("사용자 인증", "delegation")):
+                        entry = report[key]
+                        status = entry.get("http_status")
+                        count = " · {}건".format(entry["count"]) if entry.get("count") is not None else ""
+                        st.caption("{} · HTTP {}{} · {}".format(title, status if status is not None else "미확인", count, entry["detail"]))
+                    st.info(report["interpretation"])
         with st.expander("OpenAI 상태", expanded=False):
             st.caption(ai_activation_reason(bool(OPENAI_API_KEY), ENABLE_OPENAI_CHAT))
             st.caption("모델: " + (OPENAI_MODEL if ENABLE_OPENAI_CHAT and OPENAI_API_KEY else "비활성"))
@@ -542,7 +435,7 @@ with st.sidebar:
 # ── Main: minimal conversation-first interface. ────────────────────
 online = ENABLE_OPENAI_CHAT and bool(OPENAI_API_KEY) and bool(ai_identity)
 connection_error = marketplace_config_error()
-mode_title = "샌드박스" if AGENT_MODE == "mock" else ("플랫폼 설정 필요" if connection_error else "플랫폼 조회 · 읽기 전용")
+mode_title = "플랫폼 설정 필요" if connection_error else "플랫폼 조회 · 읽기 전용"
 st.markdown('''<div class="workspace-bar"><div class="workspace-name">프로젝트 에이전트</div>
 <div class="workspace-meta"><span class="status-dot"></span>{}</div></div>'''.format(escape(mode_title)), unsafe_allow_html=True)
 
@@ -564,7 +457,7 @@ if isinstance(plan, dict) and plan.get('status') not in ('CANCELLED',):
         if plan.get('storage_warning'):
             st.warning(plan['storage_warning'])
         remote_id = plan.get('remote_action_id')
-        if AGENT_MODE == 'live' and remote_id and token:
+        if remote_id and token:
             st.caption('플랫폼 초안 ID · ' + str(remote_id)[:36])
             if st.button('플랫폼 초안 상태 다시 확인', key='workflow_remote_check_v015'):
                 try:
@@ -637,9 +530,8 @@ if not session["turns"]:
                         pending_prompt = prompt
                     st.markdown('<p class="suggestion-hint">{}</p>'.format(escape(hint)), unsafe_allow_html=True)
 
-if AGENT_MODE == 'live':
-    if connection_error:
-        st.warning(connection_error)
+if connection_error:
+    st.warning(connection_error)
 # Keep useful tool entry points available after conversation starts.
 # Buttons submit an ordinary user request through the exact same chat pipeline.
 if session["turns"]:

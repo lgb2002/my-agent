@@ -1,3 +1,25 @@
+## v0.17 — 내부 Mock 모드 제거 / ProjectAgain API 단일화 (2026-11-17)
+
+- 실사용 중 로컬 가상 플랫폼 JSON·SQLite를 불러오는 경로와 가상 사용자/거래 시뮬레이션 제거.
+- `AGENT_MODE` 설정 제거; 이전 환경변수는 무시. API 호스트가 없을 때에는 조회 실패를 명확히 알림.
+- 실제 플랫폼의 `include_demo=true` 목록 필터는 **기본 활성화 및 사용자 해제 가능**으로 유지.
+- Mock 전용 도구 4개 제거, 플랫폼 API를 사용하는 9개 도구로 정리.
+- ZIP 정적 검사와 사용자 확인 기반 초안 등록의 권한 경계는 유지.
+- 사용되지 않는 시연 ZIP 생성 헬퍼 및 테스트 파일 제거. 기존 테스트를 API-only 계약 기반으로 정리.
+- 메타데이터 점검에서 플랫폼이 제공한 `is_demo` 값을 보존.
+- README, RUNBOOK, DESIGN.md를 API 단일 출처 원칙에 맞춰 갱신.
+- 자동 테스트는 외부 API를 호출하지 않는 대역을 사용하며 실제 Cloud/Replit 연동은 별도 검증.
+
+---
+
+## v0.16.1 — Streamlit Cloud 부팅 시 시연 파일 의존성 수정 (2026-11-17)
+
+- `services/demo_marketplace.py`: 모듈 import 단계의 `init_db()` 제거. Live 모드는 시연 데이터 파일이 없어도 시작 가능.
+- `services/marketplace.py`: DEMO 클라이언트 사용 시에만 지연 초기화.
+- 시연 파일 미포함 시 안내 가능한 `DEMO_FIXTURE_MISSING` 오류 처리.
+- 배포 회귀 테스트 3개 추가. 기존 기능 및 DB 연결 설정 유지.
+- 현재 오류를 해결하려면 GitHub 저장소에 `fixtures/demo_contract.json`이 포함되어 있는지도 확인해야 함.
+
 # ProjectAgain Agent · v0.16
 
 # v0.16 · AI suitability + authenticated quotas

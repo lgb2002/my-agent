@@ -9,13 +9,11 @@ import contextvars
 import hashlib
 import math
 import os
-import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_CEILING
-from pathlib import Path
 
-from core.config import AGENT_MODE, DATA_DIR, OPENAI_MODEL
+from core.config import OPENAI_MODEL
 
 
 class AIAccessDenied(RuntimeError):
@@ -27,7 +25,6 @@ class AIQuotaExceeded(AIAccessDenied):
 
 
 _identity = contextvars.ContextVar('projectagain_verified_ai_subject', default=None)
-_LOCAL_DB = str(Path(DATA_DIR) / 'ai_usage_local.sqlite3')
 _GLOBAL_SUBJECT = '__GLOBAL__'
 _SCHEMA = '''CREATE TABLE IF NOT EXISTS agent_ai_quota (
     subject TEXT NOT NULL, bucket TEXT NOT NULL, period TEXT NOT NULL,
@@ -85,8 +82,7 @@ def _connection_string():
 
 
 def storage_kind():
-    return 'postgres' if _connection_string() else ('sqlite' if AGENT_MODE == 'mock' and
-        os.environ.get('AI_LOCAL_SQLITE', '').lower() == 'true' else 'unconfigured')
+    return 'postgres' if _connection_string() else 'unconfigured'
 
 
 @contextmanager
@@ -101,16 +97,11 @@ def _db():
             con = psycopg.connect(url, connect_timeout=5, sslmode='require')
         except Exception:
             raise AIAccessDenied('AI 사용량 저장소에 연결할 수 없어 유료 호출을 중지했어.') from None
-    elif kind == 'sqlite':
-        con = sqlite3.connect(_LOCAL_DB, timeout=8, isolation_level=None)
     else:
         raise AIAccessDenied('공개 AI 사용에는 공용 PostgreSQL 저장소가 필요해요. 관리자가 설정해야 해요.')
     try:
-        if kind == 'sqlite':
-            con.execute('BEGIN IMMEDIATE')
-        else:
-            # Global advisory lock: two app replicas cannot pass budget checks concurrently.
-            con.execute('SELECT pg_advisory_xact_lock(1736501601)')
+        # Global advisory lock: two app replicas cannot pass budget checks concurrently.
+        con.execute('SELECT pg_advisory_xact_lock(1736501601)')
         con.execute(_SCHEMA)
         yield con, kind
         con.commit()

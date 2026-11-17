@@ -121,7 +121,7 @@ def _risk_assessment(listing, skill, risk, monthly_cap, objective):
             'uncertainty_count': sum(x == 'UNKNOWN' for x in checks.values())}
 
 
-def recommendation(listings, preferences, demo_only=True):
+def recommendation(listings, preferences):
     """First enforce factual constraints, then publish an auditable candidate pool.
 
     The optional LLM preference evaluation runs *after* this step and may not
@@ -147,7 +147,7 @@ def recommendation(listings, preferences, demo_only=True):
         if not lid:
             continue
         reasons_excluded = []
-        if listing.get('status') != 'ACTIVE' or (demo_only and not listing.get('is_demo', False)):
+        if listing.get('status') != 'ACTIVE':
             reasons_excluded.append('비활성 또는 허용되지 않은 매물')
         price = listing.get('price_krw')
         if isinstance(price, bool) or not isinstance(price, int) or price < 0:
@@ -231,7 +231,7 @@ def recommendation(listings, preferences, demo_only=True):
               'eligible_count': eligible_count, 'max_results': max_results,
               'qualitative_preferences': qualitative,
               'qualitative_review_status': 'NOT_RUN' if qualitative else 'NOT_REQUESTED',
-              'rule_version': 'risk-aware-rules-v0.2', 'is_demo': demo_only}
+              'rule_version': 'risk-aware-rules-v0.2', 'is_demo': False}
     return result
 
 
@@ -249,19 +249,4 @@ def metadata_findings(listing):
                      'title': '실제 구동 및 이전 가능성은 검사되지 않음', 'status': 'UNKNOWN',
                      'evidence_refs': [], 'recommendation': '허가된 파일 정적 검사와 격리 실행이 별도로 필요합니다.'})
     return {'report_type': 'STATIC', 'verdict': 'UNVERIFIED', 'findings': findings,
-            'evidence_refs': [], 'is_demo': True, 'dynamic_execution': 'NOT_TESTED'}
-
-
-def offer_payload(listing, price, message, repair_requests=None, support_days=1):
-    verify_amount(price)
-    if not listing.get('is_demo') or listing.get('status') != 'ACTIVE':
-        raise ValueError('활성 데모 매물에만 제안할 수 있습니다.')
-    if not message or len(message) > 4000:
-        raise ValueError('협상 메시지는 1~4000자여야 합니다.')
-    terms = {'handover_deadline_days': 7,
-             'seller_support_days': int(support_days),
-             'repair_requests': repair_requests or [],
-             'acceptance_criteria': ['허가된 환경의 기능 검증은 별도 완료 확인 필요'],
-             'message': message}
-    return {'listing_id': listing['id'], 'offered_price_krw': price,
-            'terms': terms, 'expires_at': expiration_iso(), 'is_demo': True}
+            'evidence_refs': [], 'is_demo': bool(listing.get('is_demo', False)), 'dynamic_execution': 'NOT_TESTED'}

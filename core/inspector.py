@@ -108,14 +108,5 @@ def inspect_zip(raw):
     return {'report_type': 'STATIC', 'verdict': 'FAIL' if high else 'PARTIAL',
             'source_version_sha256': digest, 'findings': findings, 'evidence_refs': evidence,
             'files_scanned': len(names), 'dynamic_execution': 'NOT_TESTED',
-            'rights_status': 'UNVERIFIED', 'coverage': 'ZIP 구조/텍스트 정적 규칙 한정', 'is_demo': True}
+            'rights_status': 'UNVERIFIED', 'coverage': 'ZIP 구조/텍스트 정적 규칙 한정'}
 
-
-def sample_zip():
-    """Generate locally the synthetic, purposely incomplete source archive."""
-    mem = io.BytesIO()
-    with zipfile.ZipFile(mem, 'w') as z:
-        z.writestr('app.py', 'import os\n\ndef demo_reply():\n    token = os.getenv("AI_API_KEY")\n    return "Demo only" if token else "missing configuration"\n')
-        z.writestr('README.md', '# DEMO 일정관리 샘플\n이 소스는 API 설정 절차가 빠져 있습니다. 실행하지 마세요.\n')
-        z.writestr('requirements.txt', 'fastapi==0.95.2\n')
-    return mem.getvalue()

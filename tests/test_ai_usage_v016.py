@@ -1,5 +1,8 @@
 """No-network test coverage for cost reserve/settle, limits and metered calls."""
 import hashlib
+import sqlite3
+import threading
+from contextlib import contextmanager
 import os
 import tempfile
 import unittest
@@ -14,16 +17,29 @@ class AIUsageTests(unittest.TestCase):
         self.m = usage
         self.temp = tempfile.TemporaryDirectory()
         self.env = patch.dict(os.environ, {
-            'AI_LOCAL_SQLITE': 'true', 'AI_CALLS_PER_MINUTE': '20',
-            'AI_CALLS_PER_USER_DAY': '20', 'AI_GLOBAL_CALLS_PER_DAY': '30',
-            'AI_USER_DAILY_USD': '1', 'AI_GLOBAL_DAILY_USD': '2',
-            'AI_MAX_RESERVED_CALL_USD': '0.10',
+            'AI_CALLS_PER_MINUTE': '20', 'AI_CALLS_PER_USER_DAY': '20',
+            'AI_GLOBAL_CALLS_PER_DAY': '30', 'AI_USER_DAILY_USD': '1',
+            'AI_GLOBAL_DAILY_USD': '2', 'AI_MAX_RESERVED_CALL_USD': '0.10',
         })
         self.env.start()
-        self.db = patch.object(usage, '_LOCAL_DB', str(Path(self.temp.name) / 'test_ai_usage.sqlite3'))
+        self.test_db = str(Path(self.temp.name) / 'test_usage.sqlite3')
+        self.lock = threading.RLock()
+        @contextmanager
+        def fake_database():
+            # No production SQLite fallback. This is a locked test seam only.
+            with self.lock:
+                con=sqlite3.connect(self.test_db, timeout=8)
+                try:
+                    con.execute(usage._SCHEMA)
+                    yield con, 'sqlite'
+                    con.commit()
+                except Exception:
+                    con.rollback()
+                    raise
+                finally:
+                    con.close()
+        self.db = patch.object(usage, '_db', fake_database)
         self.db.start()
-        self.mode = patch.object(usage, 'AGENT_MODE', 'mock')
-        self.mode.start()
         self.model = patch.object(usage, 'OPENAI_MODEL', 'gpt-4.1-mini')
         self.model.start()
         usage.set_ai_identity('platform:' + hashlib.sha256(b'alice').hexdigest())
@@ -31,7 +47,6 @@ class AIUsageTests(unittest.TestCase):
     def tearDown(self):
         self.m.set_ai_identity(None)
         self.model.stop()
-        self.mode.stop()
         self.db.stop()
         self.env.stop()
         self.temp.cleanup()
@@ -41,10 +56,9 @@ class AIUsageTests(unittest.TestCase):
         with self.assertRaises(self.m.AIAccessDenied):
             self.m.reserve('hello', 200)
 
-    def test_postgres_required_for_live_even_with_sqlite_setting(self):
-        self.m.AGENT_MODE = 'live'
-        with self.assertRaises(self.m.AIAccessDenied):
-            self.m.reserve('hello', 200)
+    def test_no_public_sqlite_fallback(self):
+        with patch.dict(os.environ, {'AI_LOCAL_SQLITE': 'true'}):
+            self.assertEqual(self.m.storage_kind(), 'unconfigured')
 
     def test_successful_reservation_and_usage_settlement(self):
         ticket = self.m.reserve('hello', 200)
@@ -84,9 +98,9 @@ class AIUsageTests(unittest.TestCase):
             self.m.reserve('hello', 200)
 
     def test_missing_database_fails_closed(self):
-        os.environ.pop('AI_LOCAL_SQLITE',None)
-        with self.assertRaises(self.m.AIAccessDenied):
-            self.m.reserve('hello', 200)
+        with patch.object(self.m, '_db', side_effect=self.m.AIAccessDenied('not configured')):
+            with self.assertRaises(self.m.AIAccessDenied):
+                self.m.reserve('hello', 200)
 
     def test_model_invoke_metered(self):
         class Fake:
@@ -150,7 +164,7 @@ class AIUsageTests(unittest.TestCase):
     def test_no_private_content_stored_in_ledger(self):
         message = 'private buyer detail: confidential words'
         self.m.reserve(message,100)
-        db = Path(self.m._LOCAL_DB).read_bytes()
+        db = Path(self.test_db).read_bytes()
         self.assertNotIn(message.encode(),db)
         self.assertNotIn(b'confidential',db)
 

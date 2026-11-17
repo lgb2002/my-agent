@@ -70,13 +70,13 @@ class LiveDraftTests(unittest.TestCase):
 
     def test_default_is_disabled(self):
         from core import live_actions as la
-        with patch.object(la,'ENABLE_LIVE_DRAFTS',False), patch.object(la,'AGENT_MODE','live'):
+        with patch.object(la,'ENABLE_LIVE_DRAFTS',False):
             with self.assertRaises(ValueError):
                 la.submit_confirmed_draft(self.pending)
 
     def test_token_required_and_user_bound(self):
         from core import live_actions as la
-        with patch.object(la,'ENABLE_LIVE_DRAFTS',True),patch.object(la,'AGENT_MODE','live'):
+        with patch.object(la,'ENABLE_LIVE_DRAFTS',True):
             with patch.object(la,'delegated_token',return_value=''):
                 with self.assertRaises(ValueError):
                     la.submit_confirmed_draft(self.pending)
@@ -96,7 +96,7 @@ class LiveDraftTests(unittest.TestCase):
             def draft_action(self,proposal,key):
                 called.append((proposal,key))
                 return {'id':actionid,'status':'PENDING_APPROVAL'}
-        with patch.object(la,'ENABLE_LIVE_DRAFTS',True),patch.object(la,'AGENT_MODE','live'),patch.object(la,'delegated_token',return_value='private-token'):
+        with patch.object(la,'ENABLE_LIVE_DRAFTS',True),patch.object(la,'delegated_token',return_value='private-token'):
             with patch.object(la,'LiveReadOnlyClient',return_value=Client()):
                 result=la.submit_confirmed_draft(self.pending)
         self.assertEqual(result,actionid)

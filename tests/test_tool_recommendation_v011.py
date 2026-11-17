@@ -121,7 +121,7 @@ class ToolAccessUiTest(unittest.TestCase):
     def test_no_server_and_auth_policies_preserved(self):
         app=(ROOT/'app.py').read_text(encoding='utf8')
         tools=(ROOT/'agent/tools.py').read_text(encoding='utf8')
-        self.assertIn('perform_confirmed_action',app)
+        self.assertIn('submit_confirmed_draft',app)
         self.assertIn('set_request_context(token=token',app)
         self.assertIn('ToolDispatcher',tools)
 

@@ -157,35 +157,35 @@ class AMeaningValidationTests(unittest.TestCase):
 
 class CRiskAssessmentTests(unittest.TestCase):
     def test_legacy_unverified_project_is_not_low_risk_recommendation(self):
-        out=recommendation([listing(verification_status='UNVERIFIED')],prefs(),demo_only=False)
+        out=recommendation([listing(verification_status='UNVERIFIED')],prefs())
         self.assertEqual(out['eligible_count'],0)
         self.assertTrue(any('검사 자료' in r for r in out['excluded'][0]['reasons']))
 
     def test_low_risk_unknown_monthly_cost_under_cap_is_excluded(self):
         out=recommendation([listing(monthly_cost_estimate_krw=None)],
-                           prefs(max_monthly_cost_krw=10000), demo_only=False)
+                           prefs(max_monthly_cost_krw=10000))
         self.assertEqual(out['eligible_count'],0)
         self.assertIn('운영비 미확인',' '.join(out['excluded'][0]['reasons']))
 
     def test_low_risk_complex_stack_beyond_skill_is_excluded(self):
         out=recommendation([listing(tech_stack=['React','Kubernetes'],category='saas')],
-                           prefs(skill_level='NONE'),demo_only=False)
+                           prefs(skill_level='NONE'))
         self.assertEqual(out['eligible_count'],0)
         self.assertTrue(any('복잡도' in r for r in out['excluded'][0]['reasons']))
 
     def test_low_risk_missing_rights_is_excluded(self):
-        out=recommendation([listing(sale_rights_type=None)],prefs(),demo_only=False)
+        out=recommendation([listing(sale_rights_type=None)],prefs())
         self.assertEqual(out['eligible_count'],0)
         self.assertTrue(any('권리' in r for r in out['excluded'][0]['reasons']))
 
     def test_serious_known_defect_blocks_low_risk(self):
-        out=recommendation([listing(known_defects=['관리자 키가 노출되어 있음'])],prefs(),demo_only=False)
+        out=recommendation([listing(known_defects=['관리자 키가 노출되어 있음'])],prefs())
         self.assertEqual(out['eligible_count'],0)
 
     def test_medium_risk_unknown_remains_visible_as_uncertain(self):
         out=recommendation([listing(verification_status='UNVERIFIED',
                                      monthly_cost_estimate_krw=None,sale_rights_type='')],
-                           prefs(risk_tolerance='MEDIUM'),demo_only=False)
+                           prefs(risk_tolerance='MEDIUM'))
         self.assertEqual(out['eligible_count'],1)
         row=out['ranked'][0]
         self.assertEqual(row['risk_checks']['operations'],'UNKNOWN')
@@ -195,7 +195,7 @@ class CRiskAssessmentTests(unittest.TestCase):
 
     def test_eligible_pool_never_contains_excluded_price(self):
         out=recommendation([listing('a'),listing('b',price_krw=900000)],
-                           prefs(risk_tolerance='MEDIUM',qualitative_preferences=['관리 쉬움']),demo_only=False)
+                           prefs(risk_tolerance='MEDIUM',qualitative_preferences=['관리 쉬움']))
         self.assertEqual(len(out['candidate_pool']),1)
         self.assertEqual(out['candidate_pool'][0]['listing_id'],'a')
         self.assertEqual(out['qualitative_preferences'],['관리 쉬움'])
@@ -206,7 +206,7 @@ class BQualitativeRankingTests(unittest.TestCase):
         self.listings = [listing('a',description='서버 운영과 배포를 직접 해야 합니다.'),
                          listing('b',description='관리 편의 기능과 자동화 기능이 제공됩니다.')]
         self.base = recommendation(self.listings,prefs(risk_tolerance='MEDIUM',
-                    qualitative_preferences=['관리 편의']), demo_only=False)
+                    qualitative_preferences=['관리 편의']))
 
     def test_documented_match_can_rerank_candidate(self):
         review = PreferenceReview.model_validate({'assessments':[{
@@ -244,7 +244,7 @@ class BQualitativeRankingTests(unittest.TestCase):
 
     def test_hard_budget_risk_gate_cannot_be_overridden(self):
         base=recommendation([listing('a'),listing('b',price_krw=600000,
-            description='관리 편의 기능')],prefs(risk_tolerance='MEDIUM'),demo_only=False)
+            description='관리 편의 기능')],prefs(risk_tolerance='MEDIUM'))
         review=PreferenceReview.model_validate({'assessments':[{
             'listing_id':'b','preference':'관리 편의','verdict':'MATCH',
             'evidence_quote':'관리 편의 기능','explanation':'좋은 항목'}]})
@@ -303,7 +303,7 @@ class DIntegratedQualitativeToolFlow(unittest.TestCase):
         model=Model()
         base=recommendation([listing('a',description='서버를 직접 관리해야 합니다.'),
                              listing('b',description='관리 편의 기능이 제공됩니다.')],
-                            prefs(risk_tolerance='MEDIUM'),demo_only=False)
+                            prefs(risk_tolerance='MEDIUM'))
         def dispatch(_dispatcher, name, args):
             self.assertEqual(name,'recommend_listings')
             self.assertEqual(args['qualitative_preferences'],['관리 편의'])

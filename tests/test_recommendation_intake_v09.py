@@ -109,7 +109,7 @@ class PolicyTest(unittest.TestCase):
     def test_rejects_wrong_tech_category_price_and_caps(self):
         # This test isolates price/category/stack filters. LOW-risk now requires
         # additional disclosure and verification, tested separately in v0.13.
-        out=recommendation(self.items,{**self.prefs, 'risk_tolerance':'MEDIUM'},demo_only=False)
+        out=recommendation(self.items,{**self.prefs, 'risk_tolerance':'MEDIUM'})
         self.assertEqual(out['eligible_count'],3)
         self.assertEqual(len(out['ranked']),2)
         self.assertEqual(len(out['excluded']),2)
@@ -117,7 +117,7 @@ class PolicyTest(unittest.TestCase):
 
     def test_profit_risk_not_misrepresented_as_verified(self):
         prefs={**self.prefs,'objectives':['수익 창출'],'preferred_categories':[]}
-        out=recommendation(self.items,prefs,demo_only=False)
+        out=recommendation(self.items,prefs)
         self.assertTrue(all(any('수익' in risk for risk in x['risks']) for x in out['ranked']))
 
 
