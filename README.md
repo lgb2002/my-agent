@@ -1,4 +1,7 @@
-# ProjectAgain Agent v0.18.3 — Streamlit Cloud 의존성 직접 반영
+# ProjectAgain Agent v0.18.4 — Streamlit 대화 보관함 첫 실행 수정
+
+> **v0.18.4 배포 수정:** Streamlit Cloud 최초 방문에서 대화 보관함이 `None`으로 초기화되어 앱이 중단되던 오류를 수정했습니다. 추가 명령이나 Secrets 변경 없이 전체 프로젝트를 GitHub에 반영하면 됩니다. 기존 계정 저장소/사용자 설정은 유지하세요.
+
 
 이번 버전은 Streamlit Cloud가 읽는 루트 `requirements.txt`를 **직접 포함**합니다.
 `cryptography`, `authlib`, `psycopg[binary]` 및 기존 실행 필수 의존성을 함께 선언했으며,
@@ -7,7 +10,7 @@
 
 기존 GitHub `requirements.txt`에 프로젝트 외 추가 패키지가 있었다면 해당 항목은 삭제하지 말고 새 파일에
 유지해 주세요. `.env`, `.venv`, `data/`, 실제 Streamlit Secrets 및 PostgreSQL 사용자 데이터는 변경하지 않습니다.
-앱 기능, API 권한, OAuth Broker 로직, DESIGN.md는 v0.18.1 그대로입니다.
+대화 보관함 초기화 오류 외의 기능, API 권한, OAuth Broker 로직, DESIGN.md는 유지합니다.
 실제 Streamlit Cloud/플랫폼 통합 검증은 별도입니다.
 
 ---

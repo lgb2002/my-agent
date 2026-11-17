@@ -66,6 +66,44 @@ class ArchiveSessionTests(unittest.TestCase):
         append_turn(self.current,'user','비공개 질문')
         self.assertEqual(other['turns'],[])
 
+    def test_first_visit_none_placeholder_keeps_legacy_session(self):
+        # v0.18.3 inserted this placeholder before trying to initialize it.
+        scope = 'live::test::fresh_visitor'
+        legacy = {'turns':[{'role':'user','content':'보존할 대화'}],
+                  'context':{'recent_listings': []},'pending':None}
+        self.store.setdefault(scope, None)
+        current = init_archive(self.store, scope, legacy)
+        self.assertIs(current, legacy)
+        self.assertEqual(len(self.store[scope]['items']), 1)
+        self.assertEqual(current['turns'][0]['content'], '보존할 대화')
+
+    def test_archive_initialization_keeps_existing_chats_unchanged(self):
+        append_turn(self.current,'user','기존 대화 보존')
+        original_id = self.archive['active']
+        second = start_conversation(self.archive)
+        append_turn(second,'user','두 번째 대화')
+        again = init_archive(self.store,self.scope,self.legacy)
+        self.assertIs(again,second)
+        self.assertIs(self.archive,self.store[self.scope])
+        self.assertIs(self.archive['items'][self.archive['active']],second)
+        self.assertEqual(len(self.archive['items']),2)
+        self.assertEqual(self.archive['items'][original_id]['turns'][0]['content'],'기존 대화 보존')
+
+    def test_missing_active_id_recovers_existing_conversation(self):
+        append_turn(self.current,'user','반드시 남겨야 할 기록')
+        original_id = self.archive['active']
+        self.archive['active'] = 'stale_chat_id'
+        recovered = init_archive(self.store,self.scope,self.legacy)
+        self.assertIs(recovered,self.current)
+        self.assertEqual(self.archive['active'],original_id)
+        self.assertEqual(len(self.archive['items']),1)
+
+    def test_app_does_not_prepopulate_empty_archive_with_none(self):
+        src=(ROOT/'app.py').read_text(encoding='utf-8')
+        self.assertNotIn('archive.setdefault(scope, None)',src)
+        self.assertIn('current = init_archive(archive, scope, current)',src)
+        self.assertIn('active_archive = archive[scope]',src)
+
     def test_no_turn_limit_or_fake_reset(self):
         for i in range(155):append_turn(self.current,'user',f'메시지 {i}')
         self.assertEqual(len(self.current['turns']),155)

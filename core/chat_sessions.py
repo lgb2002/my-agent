@@ -42,7 +42,9 @@ def _now():
 
 def init_archive(archive_store, scope, legacy_session):
     """Migrate the existing v0.17.1 live conversation on first use."""
-    if scope not in archive_store:
+    # A previous app version used setdefault(scope, None) before calling us.
+    # Treat only that placeholder as uninitialized, preserving real archives.
+    if archive_store.get(scope) is None:
         conversation_id = uuid4().hex
         archive_store[scope] = {
             'active': conversation_id,

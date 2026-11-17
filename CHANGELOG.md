@@ -1,3 +1,11 @@
+## v0.18.4 — Streamlit 첫 접속 대화 보관함 초기화 수정 (2026-11-17)
+
+- `app.py`: `archive.setdefault(scope, None)`로 미리 빈 보관함 값을 생성하던 오류 제거. 모든 진입에서 `init_archive`가 초기화·기존 대화 선택을 담당하게 변경.
+- `core/chat_sessions.py`: v0.18.3에서 세션에 남을 수 있는 `None` 보관함 자리표시자를 안전하게 복구하면서 이전 단일 대화 기록을 그대로 이전.
+- 새 방문자 초기화, 기존 대화 다중 보관, 잘못된 활성 대화 식별자, 회귀 방지 테스트 추가.
+- API, OAuth Broker, UI/UX, DESIGN.md, 사용자 데이터/DB 형식, 의존성 및 거래 승인 정책은 변경하지 않음.
+- 자동 테스트는 오프라인 검증이며 실제 Streamlit Cloud 첫 실행·플랫폼 API 연동은 별도 실환경 검증이 필요.
+
 ## v0.18.3 — Streamlit Cloud 의존성 직접 선언 (2026-11-17)
 
 - 루트 `requirements.txt`에 `cryptography>=43,<50`, `authlib>=1.3.2,<2`, `psycopg[binary]>=3.2,<4`를 포함한 실행 의존성을 직접 선언.

@@ -683,12 +683,11 @@ with st.sidebar:
     current["_include_demo_filter"] = show_demo
     # v0.17.1 migration: preserve the old live session as the first archived chat.
     archive = st.session_state.setdefault('conversation_archive_v0172', {})
-    active_archive = archive.setdefault(scope, None)
-    if active_archive is None:
-        current = init_archive(archive, scope, current)
-        active_archive = archive[scope]
-    else:
-        current = active_archive['items'][active_archive['active']]
+    # Always initialize through the archive helper: do not insert a None
+    # placeholder with setdefault(), which crashes on a visitor's first load.
+    # The helper also recovers a None placeholder left by earlier app versions.
+    current = init_archive(archive, scope, current)
+    active_archive = archive[scope]
     st.session_state['chat_sessions_v06'][scope] = current
     # Filters affect only the currently opened conversation, never archive identity.
     earlier_filter = current.get('_include_demo_filter')
