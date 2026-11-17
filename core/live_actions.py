@@ -18,7 +18,7 @@ def submit_confirmed_draft(pending):
     if not ENABLE_LIVE_DRAFTS:
         raise ValueError('실플랫폼 초안 제출은 현재 비활성화되어 있습니다.')
     if pending.get('kind') != 'live_offer_draft' or not delegated_token():
-        raise ValueError('사용자별 위임 토큰과 확인된 초안이 필요합니다.')
+        raise ValueError('ProjectAgain 계정 로그인과 확인된 초안이 필요합니다.')
     verify_amount(pending.get('price_krw'))
     try:
         lid = str(uuid.UUID(str(pending['listing_id'])))

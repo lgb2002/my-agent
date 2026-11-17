@@ -234,6 +234,13 @@ class _MeteredRunnable:
         self._structured = structured
 
     def invoke(self, messages, **kwargs):
+        # A valid browser identity alone must never authorize a paid request.
+        # Broker revalidates/renews the per-session OAuth access on demand.
+        from core.request_context import ensure_broker_access
+        try:
+            ensure_broker_access()
+        except Exception:
+            raise AIAccessDenied('계정 연결을 확인할 수 없어 AI 요청을 실행하지 않았어요.') from None
         ticket = reserve(messages, self._max_output)
         try:
             result = self._runnable.invoke(messages, **kwargs)

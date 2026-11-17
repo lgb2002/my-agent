@@ -1,0 +1,73 @@
+{
+  "test": "static CSS viewport rendering, NOT deployed Streamlit UI",
+  "chromium_executable": "/usr/bin/chromium",
+  "widths_checked": [
+    320,
+    360,
+    390,
+    768,
+    980,
+    1280,
+    1600
+  ],
+  "results": [
+    {
+      "viewport": 320,
+      "document_width": 320,
+      "content_width": 320,
+      "table_viewport_width": 293,
+      "table_scroll_width": 700,
+      "first_button_height": 46
+    },
+    {
+      "viewport": 360,
+      "document_width": 360,
+      "content_width": 360,
+      "table_viewport_width": 333,
+      "table_scroll_width": 700,
+      "first_button_height": 46
+    },
+    {
+      "viewport": 390,
+      "document_width": 390,
+      "content_width": 390,
+      "table_viewport_width": 363,
+      "table_scroll_width": 700,
+      "first_button_height": 46
+    },
+    {
+      "viewport": 768,
+      "document_width": 768,
+      "content_width": 528,
+      "table_viewport_width": 472,
+      "table_scroll_width": 472,
+      "first_button_height": 46
+    },
+    {
+      "viewport": 980,
+      "document_width": 980,
+      "content_width": 740,
+      "table_viewport_width": 684,
+      "table_scroll_width": 684,
+      "first_button_height": 46
+    },
+    {
+      "viewport": 1280,
+      "document_width": 1280,
+      "content_width": 1040,
+      "table_viewport_width": 984,
+      "table_scroll_width": 984,
+      "first_button_height": 46
+    },
+    {
+      "viewport": 1600,
+      "document_width": 1600,
+      "content_width": 1220,
+      "table_viewport_width": 1164,
+      "table_scroll_width": 1164,
+      "first_button_height": 46
+    }
+  ],
+  "real_streamlit_cloud_checked": false,
+  "mobile_touch_checked": false
+}

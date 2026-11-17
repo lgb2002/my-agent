@@ -107,8 +107,8 @@ class ToolAccessUiTest(unittest.TestCase):
         visible=[n for n in ast.walk(tree) if isinstance(n,ast.With) and
                  '사용 가능한 도구' in (ast.get_source_segment(source,n) or '')]
         self.assertTrue(visible)
-        self.assertIn('continue_tool_v11_',source)
-        self.assertIn('if session["turns"]:',source)
+        self.assertIn('workspace_action_v0173_',source)
+        self.assertIn("if session['turns']:",source)
         self.assertIn('실행 결과와 근거 보기',source)
         self.assertIn('tool-activity',source)
 

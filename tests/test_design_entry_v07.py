@@ -20,10 +20,12 @@ class EntryDesignTests(unittest.TestCase):
         self.assertIsNotNone(examples)
         self.assertEqual([r[0] for r in examples], ['01', '02', '03', '04'])
         self.assertEqual(len({r[1] for r in examples}), 4)
-        targets = ['search_listings', 'recommend_listings', 'search_listings', 'get_recent_jobs']
+        targets = ['search_listings', 'recommend_listings', 'help', 'get_recent_jobs']
         for option, target in zip(examples, targets):
             with self.subTest(label=option[1]):
                 self.assertEqual(offline_intent(option[3], {})[0], target)
+        # Inspect preparation is explanatory until a listing is explicitly selected.
+        self.assertNotEqual(examples[0][3], examples[2][3])
 
     def test_ui_chrome_keeps_native_streamlit_controls(self):
         source = (ROOT / 'app.py').read_text(encoding='utf-8')

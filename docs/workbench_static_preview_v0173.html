@@ -1,0 +1,251 @@
+<!doctype html><html lang="ko"><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>html{box-sizing:border-box}*,*:before,*:after{box-sizing:inherit}body{margin:0;padding:0;background:#FAFAF8;color:#202D26;font-family:Arial,sans-serif}
+.shell{max-width:1050px;margin:auto;padding:20px 22px 90px}table{width:100%;border-collapse:collapse}th,td{padding:14px 9px;border-bottom:1px solid #DEE5DE;text-align:left;vertical-align:top}td{font-size:13px;line-height:1.55}
+.stButton button{width:100%;background:#fff;border:1px solid #DEE5DE;border-radius:8px;padding:13px;color:#295447}
+[data-testid="stHorizontalBlock"]{display:flex;gap:12px}[data-testid="column"]{flex:1;min-width:0} </style>
+<style>/* ProjectAgain · focused conversational workspace
+   Native Streamlit widgets and interaction semantics stay intact.
+   See DESIGN.md for validated code behavior vs unverified cloud rendering. */
+:root {
+  --bg: #FAFAF8;
+  --paper: #FFFFFF;
+  --ink: #202D26;
+  --muted: #596C61;
+  --soft: #5F7467;
+  --line: #DEE5DE;
+  --accent: #295447;
+  --accent-hover: #1B4336;
+  --focus: #428568;
+}
+html, body, [data-testid="stApp"] {
+  font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+[data-testid="stApp"], [data-testid="stAppViewContainer"] {background:var(--bg);color:var(--ink);}
+[data-testid="stSidebar"] {background:#F4F6F2;border-right:1px solid var(--line);}
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {gap:.65rem;}
+section.main > div.block-container, [data-testid="stMainBlockContainer"] {
+  max-width:1024px;
+  padding-top:1.7rem;
+  padding-bottom:6.75rem;
+}
+/* The existing wordmark is retained, not replaced with a decorative logo. */
+.brand {display:flex;align-items:center;gap:10px;font-size:20px;font-weight:760;
+  letter-spacing:-.055em;color:#263B30;margin:14px 0 26px;}
+.brand-symbol {display:inline-flex;width:30px;height:30px;align-items:center;justify-content:center;
+  border:1px solid #C7D7C9;border-radius:8px;background:#E9F0E8;font-size:19px;color:var(--accent);}
+.brand-sub {color:#627568;font-size:12px;margin:0 0 20px 40px;letter-spacing:-.005em;}
+.sidebar-heading {font-size:12px;font-weight:700;letter-spacing:-.01em;color:#52685A;margin:0 0 5px;}
+.side-divider {height:1px;background:var(--line);margin:21px 0 15px;}
+.side-hint {font-size:12px;color:#52685C;line-height:1.65;margin-top:2px;}
+.sidebar-meta {font-size:12px;color:#52685D;line-height:1.65;}
+.sidebar-meta p {font-size:12px;color:#657469;line-height:1.55;margin-top:8px;}
+[data-testid="stSidebar"] [data-testid="stExpander"]{background:transparent;border-color:#DDE5DC;}
+/* Keep account controls visually quiet until needed. Controls remain native. */
+[data-testid="stSidebar"] [data-testid="stCheckbox"] label {font-size:14px;}
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {color:#586E60;}
+[data-testid="stSidebar"] [data-testid="stExpander"] summary {font-weight:600;}
+/* Compact app chrome: title and environment do not compete with the task. */
+.workspace-bar {display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:7px 0 19px;border-bottom:1px solid var(--line);margin-bottom:0;}
+.workspace-name {font-size:14px;font-weight:715;color:#283B30;letter-spacing:-.025em;}
+.workspace-meta {display:flex;align-items:center;gap:9px;color:#5C6F63;font-size:12px;white-space:nowrap;}
+.status-dot {height:7px;width:7px;background:#4B8667;border-radius:50%;display:inline-block;}
+.meta-separator {color:#AEBDB1;}
+/* Hero: one question, one clear explanation, no redundant second heading. */
+.welcome {padding:clamp(52px,9vh,92px) 0 53px;max-width:790px;}
+.welcome-eyebrow {display:flex;align-items:center;gap:11px;font-size:11px;font-weight:700;
+  color:#476E59;letter-spacing:.12em;margin-bottom:22px;}
+.welcome-rule {display:block;width:23px;height:2px;background:var(--accent);flex-shrink:0;}
+.welcome-title {font-size:clamp(33px,3.2vw,42px);line-height:1.24;letter-spacing:-.065em;
+  font-weight:720;color:#1E3027;margin:0;word-break:keep-all;}
+.welcome-description {margin:23px 0 0;color:var(--muted);font-size:15.5px;line-height:1.82;
+  letter-spacing:-.016em;word-break:keep-all;}
+/* Starter actions are content-led rows, not four indistinguishable cards. */
+.st-key-welcome_actions {padding-top:0;}
+.welcome-actions-heading {display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  margin-bottom:15px;border-bottom:1px solid var(--line);padding-bottom:13px;}
+.welcome-actions-title {font-size:14px;font-weight:700;letter-spacing:-.025em;color:var(--ink);}
+.welcome-actions-count {font-size:10.5px;font-weight:650;color:#607467;letter-spacing:.09em;}
+.st-key-welcome_actions .suggestion-index {font-size:11px;letter-spacing:.09em;
+  font-weight:680;color:#557B64;margin:8px 0 0;}
+.st-key-welcome_actions .stButton > button:not([kind="primary"]) {
+  display:flex;width:100%;min-height:39px;margin:0;border:0;border-radius:0;background:transparent;
+  box-shadow:none;text-align:left;justify-content:space-between;align-items:center;
+  padding:6px 2px 4px 0;color:#20352A;font-size:16px;font-weight:675;
+  letter-spacing:-.03em;transition:color .15s ease;
+}
+.st-key-welcome_actions .stButton > button:not([kind="primary"])::after {
+  content:"↗";font-size:18px;font-weight:400;line-height:1;color:#658472;
+  transform:translateY(0);transition:transform .15s ease,color .15s ease;
+}
+.st-key-welcome_actions .stButton > button:not([kind="primary"]):hover {
+  color:var(--accent-hover);background:transparent;border:0;
+}
+.st-key-welcome_actions .stButton > button:not([kind="primary"]):hover::after {
+  color:var(--accent-hover);transform:translate(2px,-2px);
+}
+.st-key-welcome_actions .stButton > button:not([kind="primary"]):focus-visible {
+  outline:2px solid var(--focus);outline-offset:3px;border-radius:2px;
+}
+.st-key-welcome_actions .suggestion-hint {font-size:12.5px;color:var(--muted);line-height:1.6;
+  margin:-2px 0 20px;letter-spacing:-.01em;word-break:keep-all;}
+/* Shared controls: preserve original behavior and conversation/approval layouts. */
+.stButton > button {min-height:41px;border-radius:9px;font-weight:650;letter-spacing:-.02em;}
+.stButton > button:not([kind="primary"]) {background:#FFFFFF;border:1px solid var(--line);color:#3C5145;}
+.stButton > button:not([kind="primary"]):hover {border-color:#91AC99;background:#F8FBF8;color:#234839;}
+.stButton > button[kind="primary"], .stButton > button[data-testid="stBaseButton-primary"] {
+  background:var(--accent);border-color:var(--accent);color:#fff;
+}
+.stButton > button[kind="primary"]:hover {background:var(--accent-hover);border-color:var(--accent-hover);}
+.stButton > button:focus-visible {outline:2px solid var(--focus);outline-offset:2px;}
+[data-testid="stChatMessage"] {border:1px solid var(--line);background:var(--paper);border-radius:13px;
+  padding:1rem 1.08rem;margin:9px 0;box-shadow:none;}
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]),
+[data-testid="stChatMessage"]:has([aria-label="Chat message from user"]) {
+  border-color:#E3EAE2;background:#F1F5F0;
+}
+[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] p {font-size:14px;line-height:1.75;}
+[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] li {font-size:14px;line-height:1.65;margin-bottom:4px;}
+[data-testid="stChatMessage"] [data-testid="stExpander"] {border:1px solid #E5ECE4;border-radius:9px;background:#FBFCFA;}
+/* A visible but quiet trace connects each AI result to the executed tool.
+   Structured payloads remain on-demand, not dumped into chat. */
+.tool-activity {display:flex;align-items:center;gap:9px;margin:10px 0 6px;
+  padding:8px 11px;border:1px solid #DAE7DF;border-radius:8px;
+  background:#F8FAF7;color:#244938;font-size:12.5px;line-height:1.4;}
+.tool-activity-indicator {width:7px;height:7px;flex:0 0 7px;border-radius:50%;background:#337857;}
+.tool-activity-name {font-weight:700;letter-spacing:-.01em;}
+.tool-activity-state {margin-left:auto;font-size:12px;color:#42634C;}
+.tool-activity-problem {background:#FFFBF8;border-color:#ECD9CF;color:#79412D;}
+.tool-activity-problem .tool-activity-indicator {background:#A65D44;}
+.tool-activity-problem .tool-activity-state {color:#79412D;}
+.conversation-actions-label {font-size:12px;color:#566C5F;font-weight:650;
+  margin:15px 0 8px;}
+.st-key-conversation_shortcuts_v11 .stButton > button {min-height:36px;
+  border:1px solid #DAE5DA;border-radius:8px;font-size:12.5px;
+  background:#fff;color:#295447;}
+.st-key-conversation_shortcuts_v11 .stButton > button:hover {background:#F4F8F3;}
+/* One document scrollbar: do not trap the transcript inside a fixed-height
+   container. Workflow summary stays compact, details open by user choice. */
+.st-key-workflow_summary_v0171 {padding:14px 0 11px;border-bottom:1px solid var(--line);margin-bottom:9px;}
+.st-key-workflow_summary_v0171 [data-testid="stProgressBar"] {max-width:100%;}
+.st-key-workflow_summary_v0171 [data-testid="stExpander"] {background:#fff;border-color:#E2E8E0;}
+[data-testid="stTable"] {max-width:100%;overflow-x:auto;}
+[data-testid="stTable"] table {font-size:12.5px;line-height:1.5;}
+[data-testid="stChatMessage"] [data-testid="stTable"] {margin:8px 0 14px;}
+[data-testid="stChatMessage"] [data-testid="stTable"] th {background:#F5F7F3;}
+[data-testid="stChatMessage"] [data-testid="stExpander"] summary {font-size:13px;font-weight:650;}
+[data-testid="stChatMessage"] > div {min-width:0;}
+[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] {overflow-wrap:anywhere;}
+.history-start-label {color:#5B7161;font-size:12px;font-weight:650;
+  letter-spacing:-.01em;margin:4px 0 16px;}
+/* Chat remains the primary action, including before the first message. */
+[data-testid="stChatInput"] {background:#fff;border:1px solid #CCDCD0;border-radius:12px;
+  box-shadow:0 3px 12px rgba(32,57,43,.045);}
+[data-testid="stChatInput"]:focus-within {border-color:#4E8868;
+  box-shadow:0 0 0 3px rgba(66,133,104,.14);}
+[data-testid="stChatInput"] textarea {font-size:15px !important;color:var(--ink);}
+[data-testid="stChatInput"] button {color:var(--accent);}
+[data-testid="stExpander"], [data-testid="stAlert"] {border-radius:10px;}
+.approval-panel {margin:26px 0 14px;padding:14px 17px;border:1px solid #E9D9CE;border-radius:10px;background:#FFFCF9;}
+.approval-kicker {font-size:11px;letter-spacing:.08em;font-weight:750;color:#976F58;}
+.approval-title {font-size:17px;font-weight:760;letter-spacing:-.04em;color:#342D27;margin:5px 0;}
+.approval-desc {font-size:13px;line-height:1.65;color:#786E67;margin:4px 0 0;}
+.footer-note {text-align:center;color:#63746A;font-size:12px;padding-top:23px;line-height:1.6;}
+@media (max-width:760px) {
+  section.main>div.block-container,[data-testid="stMainBlockContainer"] {padding:1rem .95rem 5.8rem;}
+  .workspace-bar {padding-bottom:12px;}
+  .workspace-meta {font-size:11px;gap:6px;}
+  .welcome {padding:38px 0 26px;}
+  .welcome-title {font-size:clamp(29px,8.2vw,36px);line-height:1.28;}
+  .welcome-description {font-size:14.5px;line-height:1.75;margin-top:16px;}
+  .desktop-break {display:none;}
+  .welcome-actions-count {display:none;}
+  .st-key-welcome_actions [data-testid="stHorizontalBlock"] {flex-direction:column;gap:0;}
+  .st-key-welcome_actions [data-testid="column"] {width:100% !important;min-width:0 !important;flex:1 1 100% !important;}
+  .st-key-welcome_actions .suggestion-hint {margin-bottom:11px;}
+  [data-testid="stChatMessage"] {padding:.78rem .78rem;}
+  [data-testid="stChatInput"] textarea {font-size:14px !important;}
+  .tool-activity {flex-wrap:wrap;gap:6px;padding:7px 9px;}
+  .tool-activity-state {margin-left:auto;}
+  .conversation-actions-label {margin-top:11px;}
+  .st-key-workflow_summary_v0171 {padding:12px 0 8px;}
+  [data-testid="stChatMessage"] [data-testid="stTable"] {max-width:100%;overflow-x:auto;}
+  [data-testid="stChatMessage"] [data-testid="stExpander"] summary {line-height:1.45;}
+}
+@media (prefers-reduced-motion:reduce) {
+  .st-key-welcome_actions .stButton > button,
+  .st-key-welcome_actions .stButton > button::after {transition:none !important;}
+}
+
+/* v0.17.2 — navigation and responsive controls for nine end-to-end UX fixes.
+   Keep native Streamlit keyboard/focus semantics and the full page scrollbar. */
+.st-key-conversation_shortcuts_v11 [data-testid="stHorizontalBlock"] {row-gap:7px;}
+[data-testid="stSidebar"] [data-testid="stButton"] button {white-space:normal;text-align:left;overflow-wrap:anywhere;}
+[data-testid="stSidebar"] [data-testid="stMetric"] [data-testid="stMetricValue"] {font-variant-numeric:tabular-nums;}
+.approval-panel + div [data-testid="stMetric"] {padding:6px 0 9px;}
+[data-testid="stDataFrame"], [data-testid="stTable"] {max-width:100%;min-width:0;overflow-x:auto;}
+[data-testid="stMain"] img {max-width:100%;height:auto;}
+@media (max-width:900px) {
+  [data-testid="stMainBlockContainer"] {max-width:100%;padding-inline:1rem;}
+  .workspace-meta {white-space:normal;text-align:right;}
+  [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] {min-width:0;}
+}
+@media (max-width:600px) {
+  [data-testid="stMainBlockContainer"] {padding-inline:.8rem;padding-bottom:7rem;}
+  .welcome-title {font-size:30px;}
+  .workspace-bar {flex-wrap:wrap;gap:5px;}
+  .workspace-meta {font-size:11px;}
+  .st-key-conversation_shortcuts_v11 [data-testid="stHorizontalBlock"] {flex-wrap:wrap;gap:6px;}
+  .st-key-conversation_shortcuts_v11 [data-testid="column"] {min-width:0 !important;flex:1 1 calc(50% - 4px) !important;}
+  .st-key-conversation_shortcuts_v11 .stButton>button {min-height:44px;white-space:normal;line-height:1.35;}
+  .approval-panel {padding:12px 13px;margin:15px 0 10px;}
+  [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] {gap:5px;}
+  [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button {padding-inline:5px;font-size:12px;}
+  [data-testid="stChatMessage"] {margin-block:7px;padding:.7rem;}
+}
+@media (max-width:375px) {
+  .st-key-conversation_shortcuts_v11 [data-testid="column"] {flex-basis:100% !important;}
+  .workspace-bar {padding-inline:0;}
+}
+
+
+/* v0.17.3 — A state-aware workbench where verified results precede transcript.
+   Avoid nested vertical scroll areas and decorative repeated cards. */
+.st-key-primary_workbench_v0173 {padding:27px 0 22px;border-bottom:1px solid var(--line);margin-bottom:13px;}
+.workbench-eyebrow {font-size:11px;font-weight:760;letter-spacing:.10em;
+  color:#54715F;text-transform:uppercase;margin-bottom:9px;}
+.workbench-title {font-size:clamp(24px,2.65vw,31px);font-weight:720;
+  letter-spacing:-.055em;line-height:1.27;color:#1D3227;margin:0 0 19px;
+  word-break:keep-all;}
+.criteria-strip {display:flex;gap:7px;flex-wrap:wrap;margin:9px 0 15px;}
+.criteria-pill {display:inline-flex;max-width:100%;border:1px solid #DDE6D9;
+  border-radius:6px;background:#F5F8F3;padding:6px 9px;color:#405A48;
+  font-size:12.5px;font-weight:570;line-height:1.4;overflow-wrap:anywhere;}
+.next-actions-heading {font-size:12px;color:#587262;font-weight:720;
+  margin:20px 0 8px;letter-spacing:-.005em;}
+.st-key-workspace_action_row_v0173 .stButton > button {min-height:44px;
+  font-size:13px;border-color:#CFDCD2;background:#FFF;white-space:normal;line-height:1.4;}
+.st-key-workspace_action_row_v0173 .stButton > button:hover {background:#F5F9F5;}
+.conversation-history-separator {height:1px;background:var(--line);margin:25px 0 15px;}
+.st-key-primary_workbench_v0173 [data-testid="stTable"] {max-width:100%;overflow-x:auto;}
+.st-key-primary_workbench_v0173 [data-testid="stTable"] table {font-size:13px;}
+.st-key-primary_workbench_v0173 [data-testid="stTable"] th {background:#F5F8F4;}
+.st-key-primary_workbench_v0173 [data-testid="stExpander"] {border-color:#E1E9DF;}
+.st-key-primary_workbench_v0173 [data-testid="stMarkdownContainer"] p {
+  line-height:1.7;overflow-wrap:anywhere;}
+@media (max-width:760px) {
+  .st-key-primary_workbench_v0173 {padding-top:18px;margin-bottom:7px;}
+  .workbench-title {font-size:25px;margin-bottom:15px;}
+  .criteria-pill {font-size:12px;padding:6px 8px;}
+  .st-key-workspace_action_row_v0173 [data-testid="stHorizontalBlock"] {flex-direction:column;gap:6px;}
+  .st-key-workspace_action_row_v0173 [data-testid="column"] {width:100% !important;
+    min-width:0 !important;flex:1 1 100% !important;}
+  .st-key-workspace_action_row_v0173 .stButton > button {min-height:44px;}
+}
+</style><main class="shell"><div class="workspace-bar"><div class="workspace-name">프로젝트 작업 공간</div><div class="workspace-meta"><span class="status-dot"></span>ProjectAgain API 연결</div></div>
+<div class="st-key-primary_workbench_v0173"><div class="workbench-eyebrow">추천 결과</div><h1 class="workbench-title">후보를 비교하고 선택하기</h1><b>현재 확인된 추천 조건</b>
+<div class="criteria-strip"><span class="criteria-pill">목적 · 운영 수익</span><span class="criteria-pill">예산 · 500,000원 이하</span><span class="criteria-pill">개발 경험 · 중급</span><span class="criteria-pill">위험 허용 · 낮음</span><span class="criteria-pill">기술 · Python</span></div><p><b>추천 후보 비교</b></p><p>조건에 맞는 후보 3건 · 플랫폼 공개 매물 기준</p><div data-testid="stTable"><table><tr><th>후보</th><th>가격</th><th>맞는 이유</th><th>확인할 점</th></tr>
+<tr><td>1. 프로젝트 A</td><td>350,000원</td><td>기술 수준과 일치</td><td>운영비 자료 미확인</td></tr><tr><td>2. 프로젝트 B</td><td>420,000원</td><td>공개된 운영 자료 확인</td><td>권리 범위 확인 필요</td></tr><tr><td>3. 프로젝트 C</td><td>280,000원</td><td>예산 여유가 있음</td><td>검사 기록 미확인</td></tr></table></div>
+<p><b>1순위 · 프로젝트 A</b></p><p>Python 기술 조건과 일치하지만 운영비·권리 자료는 추가 확인이 필요합니다.</p></div>
+<div class="next-actions-heading">이어 할 수 있는 일</div><div class="st-key-workspace_action_row_v0173"><div data-testid="stHorizontalBlock"><div data-testid="column" class="stButton"><button>1순위 공개 정보 검토</button></div><div data-testid="column" class="stButton"><button>후보 차이 설명</button></div><div data-testid="column" class="stButton"><button>조건 바꿔 다시 추천</button></div></div></div><div class="conversation-history-separator"></div><p>이전 대화 및 도구 실행 기록 · 7개 메시지</p>
+<div style="padding:12px;border:1px solid #DEE5DE;border-radius:8px;color:#596C61">이전 대화 전체 보기 ▾</div><p class="footer-note">추천과 분석은 참고 자료입니다. 실제 승인 및 자산 이전은 플랫폼에서만 처리합니다.</p></main></html>

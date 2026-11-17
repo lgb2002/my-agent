@@ -14,6 +14,7 @@ from agent.llm_intake import (RecommendationTurn, make_router_messages, apply_re
 from core.config import ENABLE_OPENAI_CHAT, OPENAI_API_KEY, OPENAI_MODEL
 from core.llm_service import contains_obvious_secret
 from core.conversation_memory import build_context_digest
+from core.ux_actions import friendly_state, tool_result_label
 from agent.qualitative_review import review_preferences_with_model
 from core.ai_usage import metered_model, AIAccessDenied
 from agent.workflow import (recognize_workflow, execute_plan, read_offer_amount,
@@ -108,6 +109,8 @@ def offline_intent(text, context):
     if any(x in s for x in ("실사", "검사", "진단", "결함", "위험 분석")):
         if listing:
             return "inspect_listing", {"listing": listing}
+        if any(x in s for x in ('어떤 위험', '필요한 자료', '준비', '확인 항목')):
+            return "help", {"hint": "프로젝트를 인수하기 전에는 기술 구동 여부, 운영비, 실제 수익 근거, 보안, 소스·저작권 범위와 인수인계 자료를 확인하는 게 중요해요. 먼저 '매물 목록 보여줘'로 대상을 고른 다음, '1번 매물 공개 정보 검토해줘'라고 요청하면 현재 플랫폼에 등록된 근거를 확인할 수 있어요. 실제 구동·권리 이전은 별도로 검증해야 해요."}
         return "help", {"hint": "어떤 매물을 검사할까? 먼저 '매물 목록 보여줘', 다음에 '1번 매물 실사해줘'라고 말해줘."}
     if any(x in s for x in ("추천", "골라", "찾아줘", "조건에 맞", "적합")):
         budget = _offline_price(s)
@@ -147,19 +150,19 @@ def _format_event(event: ToolEvent) -> str:
                 lines.append('주요 제외 이유 · '+ '; '.join(str(x)[:90] for x in d['excluded_reasons'][:2]))
     elif event.name in ("inspect_listing", "inspect_attached_zip"):
         report = d.get("report") or {}
-        lines.append("**검사 결과:** {} · 동적 실행 미검증".format(report.get("verdict", d.get("status", "UNKNOWN"))))
-        lines.append("작업 ID: `{}`".format(d.get("job_id", "미상")))
+        lines.append("**정적 검토 상태:** {} · 실제 구동·권리 확인과는 별개".format(friendly_state(report.get("verdict", d.get("status", "UNKNOWN")))))
+        lines.append('세부 검사 기록은 아래 도구 결과에서 확인할 수 있어요.')
         for x in report.get("findings", [])[:5]:
             lines.append("- {} · {}".format(x.get("finding_id", "?"), str(x.get("title", ""))[:170]))
     elif event.name == "list_offers":
         for x in d.get("offers", [])[:8]:
             amount = "{:,}원".format(x["price_krw"]) if isinstance(x.get("price_krw"), int) else "금액 미확인"
-            lines.append("- **{}** · {} · ID `{}`".format(amount, x.get("status") or "상태 미확인", x.get("id") or "미확인"))
+            lines.append("- **{}** · {} · ID `{}`".format(amount, friendly_state(x.get("status")), str(x.get("id") or "미확인")[:8]))
     elif event.name == "get_buyer_preferences":
         lines.append("플랫폼에 저장된 구매 조건을 조회했어요. 필요한 사항은 연결된 계정 권한을 확인해줘.")
     elif event.name == "get_recent_jobs":
         for x in d.get("jobs", [])[:8]:
-            lines.append("- {} · {} · `{}`".format(x["task_type"], x["status"], x["id"][:8]))
+            lines.append("- {} · {}".format(x["task_type"], friendly_state(x["status"])))
     elif event.name == "get_handover":
         lines.append("등록된 인계 항목 {}건. 구매자 확인 여부는 별도로 검토해야 해요.".format(len(d.get("checks", []))))
     elif event.name.startswith("prepare_"):
@@ -421,7 +424,7 @@ class ChatAgent:
                         content = "\n\n".join(_format_event(e) for e in events) or "요청을 이해하지 못했어요. 다시 설명해줘."
                     elif events:
                         # The tool ledger is UI-verifiable and not susceptible to LLM status claims.
-                        content += "\n\n" + "\n".join("- 도구: {} · {}".format(e.label, "완료" if e.success else "실패") for e in events)
+                        content += "\n\n" + "\n".join("- 도구: {} · {}".format(e.label, tool_result_label(e.name, e.success)) for e in events)
                     if pending:
                         content += "\n\n**사용자 승인 대기:** 아직 거래 관련 초안 생성·승인·전송은 완료되지 않았어요."
                     return {"content": content, "events": [x.to_dict() for x in events], "pending": pending, "mode": "openai"}

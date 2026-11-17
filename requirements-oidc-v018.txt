@@ -1,0 +1,5 @@
+# Add to the existing requirements.txt, preserving every existing package.
+# Native Streamlit OIDC; streamlit[auth] installs the same Authlib dependency.
+authlib>=1.3.2,<2
+# If not already installed, shared durable database used by AI quotas/memory:
+psycopg[binary]>=3.2,<4

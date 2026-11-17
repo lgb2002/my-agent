@@ -1,0 +1,4 @@
+# Add these to your existing requirements.txt; do NOT overwrite the full file.
+authlib>=1.3.2,<2
+psycopg[binary]>=3.2,<4
+cryptography>=43,<50

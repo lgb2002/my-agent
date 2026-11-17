@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 import requests
 
 from .config import MARKETPLACE_BASE_URL, MARKETPLACE_AUTH_SCHEME
-from .request_context import include_demo
+from .request_context import include_demo, force_refresh_for_get, ensure_broker_access
 
 
 class MarketplaceError(Exception):
@@ -42,16 +42,25 @@ class MarketplaceClient:
         method = method.upper()
         if not path.startswith('/api/v1/') or '://' in path or '\\' in path or '?' in path or '#' in path:
             raise MarketplaceError(400, '허용되지 않은 API 경로입니다.', 'INVALID_PATH')
+        # On broker mode, every private action checks current access before use.
+        # A disconnected broker blocks access rather than reusing an old token.
+        try:
+            fresh_access = ensure_broker_access() if self.token else None
+        except Exception:
+            raise MarketplaceError(401, 'ProjectAgain 연결 상태를 확인할 수 없어요.', 'BROKER_UNAVAILABLE') from None
+        if fresh_access:
+            self.token = fresh_access
         headers = {'X-Request-ID': str(uuid.uuid4()), 'Accept': 'application/json'}
         if self.token:
             headers['Authorization'] = 'Bearer ' + self.token
         elif path.startswith(('/api/v1/auth/', '/api/v1/offers', '/api/v1/buyer-preferences/', '/api/v1/agent/', '/api/v1/transactions/')):
-            raise MarketplaceError(401, '개인 데이터 조회에는 사용자별 플랫폼 위임 토큰이 필요합니다.', 'DELEGATION_REQUIRED')
+            raise MarketplaceError(401, '개인 데이터 조회에는 ProjectAgain 계정 로그인이 필요합니다.', 'DELEGATION_REQUIRED')
         if method in ('POST', 'PUT', 'PATCH', 'DELETE'):
             if not key:
                 raise ValueError('변경 API에는 Idempotency-Key가 필요합니다.')
             headers['Idempotency-Key'] = key
-        tries = 3 if method == 'GET' else 1
+        tries = 4 if method == 'GET' else 1
+        refreshed_after_401 = False
         for attempt in range(tries):
             try:
                 response = requests.request(method, self.base_url + path, headers=headers,
@@ -66,6 +75,18 @@ class MarketplaceClient:
                 continue
             if 300 <= response.status_code < 400:
                 raise MarketplaceError(502, '예상하지 않은 API 이동 응답입니다.', 'REDIRECT_BLOCKED')
+            if response.status_code == 401 and method == 'GET' and self.token and not refreshed_after_401:
+                # One safe GET retry only. Broker uses the observed access-token
+                # hash to avoid double rotation across concurrent requests.
+                refreshed_after_401 = True
+                try:
+                    fresh = force_refresh_for_get(self.token)
+                except Exception:
+                    fresh = None
+                if fresh and fresh != self.token:
+                    self.token = fresh
+                    headers['Authorization'] = 'Bearer ' + fresh
+                    continue
             if response.status_code >= 400:
                 try:
                     err = response.json().get('error', {})
