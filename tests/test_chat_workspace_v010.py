@@ -52,8 +52,11 @@ class ChatWorkspaceV010Tests(unittest.TestCase):
         developer_block=next(node for node in ast.walk(tree)
             if isinstance(node,ast.If) and isinstance(node.test,ast.Name) and node.test.id=='SHOW_DEVELOPER_TOOLS')
         block_text=ast.get_source_segment(source,developer_block)
-        for label in ('최근 작업','대화 기록 저장','API 연결 진단','OpenAI 상태','사용 가능한 도구'):
+        for label in ('최근 작업','대화 기록 저장','API 연결 진단','OpenAI 상태'):
             self.assertIn(label,block_text)
+        # The general tool list is now user-facing; it must not be gated.
+        self.assertIn('사용 가능한 도구 · {}개', source)
+        self.assertNotIn('사용 가능한 도구', block_text)
 
     def test_document_captures_core_information_design_principles(self):
         doc=(ROOT/'DESIGN.md').read_text(encoding='utf-8')

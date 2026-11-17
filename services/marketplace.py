@@ -3,7 +3,7 @@
 Both expose the same subset of the marketplace OpenAPI methods. The DEMO
 adapter does not require any HTTP server; the remote adapter never writes.
 """
-from core.config import AGENT_MODE, DEMO_BUYER_TOKEN, DEMO_SELLER_TOKEN
+from core.config import AGENT_MODE, DEMO_BUYER_TOKEN, DEMO_SELLER_TOKEN, ENABLE_LIVE_DRAFTS
 from core.request_context import delegated_token
 from core.marketplace_client import MarketplaceClient, MarketplaceError
 from services import demo_marketplace as demo
@@ -71,6 +71,14 @@ class LiveReadOnlyClient(MarketplaceClient):
         if method.upper() != 'GET':
             raise MarketplaceError(403, 'Replit 실플랫폼 쓰기는 아직 차단되어 있습니다.', 'WRITE_DISABLED')
         return super().request('GET', path, payload=None, params=params, key=None)
+
+    def draft_action(self, action, key):
+        """Explicitly confirmed draft only. No approve, execute, or arbitrary POST."""
+        if not ENABLE_LIVE_DRAFTS:
+            raise MarketplaceError(403, '플랫폼 초안 제출이 비활성화돼 있습니다.', 'WRITE_DISABLED')
+        if action.get('action_type') != 'SUBMIT_OFFER':
+            raise MarketplaceError(422, '구매 제안 초안만 제출할 수 있습니다.', 'INVALID_ACTION')
+        return super().request('POST', '/api/v1/agent-actions', payload=action, key=key)
 
 
 def client_for_actor(actor_name):

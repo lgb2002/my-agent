@@ -1,6 +1,7 @@
 """Optional LangChain chat: strictly read-only, no marketplace tools or secrets."""
 import re
 from .config import OPENAI_MODEL, OPENAI_API_KEY
+from .ai_usage import metered_model
 
 # Detect a few obvious API credential prefixes. NOT a comprehensive secret scanner.
 SECRET_PATTERN = re.compile(r"(?:sk-[A-Za-z0-9_-]{12,}|ghp_[A-Za-z0-9_-]{12,}|Bearer\s+[A-Za-z0-9_-]{20,})", re.I)
@@ -40,7 +41,7 @@ def answer_user(message, history):
         messages.append(HumanMessage(content=item['content']) if role == 'user'
                         else AIMessage(content=item['content']))
     messages.append(HumanMessage(content=message))
-    response = model.invoke(messages)
+    response = metered_model(model, max_output_tokens=400).invoke(messages)
     content = response.content
     if isinstance(content, str):
         return content[:4000]

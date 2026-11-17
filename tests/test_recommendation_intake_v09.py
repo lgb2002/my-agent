@@ -50,9 +50,13 @@ class IntakeTest(unittest.TestCase):
     def test_model_cannot_skip_intake_even_if_enabled(self):
         from agent.chat import ChatAgent
         ctx={}
+        class UnavailableModel:
+            def with_structured_output(self, *args, **kwargs):
+                raise ConnectionError('no live AI request in tests')
         with patch('agent.chat.ENABLE_OPENAI_CHAT', True), patch('agent.chat.OPENAI_API_KEY','stub-key'):
-            result=ChatAgent('구매자 B').reply('맞춤 추천해줘',[],ctx)
-        self.assertEqual(result['mode'], 'recommendation_intake')
+            result=ChatAgent('구매자 B', model_factory=lambda: UnavailableModel()).reply('맞춤 추천해줘',[],ctx)
+        # OpenAI-enabled v0.12 does not silently fall back to regex when the API fails.
+        self.assertEqual(result['mode'], 'openai_error')
         self.assertFalse(result['events'])
 
     def test_direct_tool_does_not_guess_preferences(self):
@@ -103,7 +107,9 @@ class PolicyTest(unittest.TestCase):
                     'preferred_tech_stack':['Python'],'require_preferred_stack':True,'preferred_categories':['web_app'], 'max_results':2}
 
     def test_rejects_wrong_tech_category_price_and_caps(self):
-        out=recommendation(self.items,self.prefs,demo_only=False)
+        # This test isolates price/category/stack filters. LOW-risk now requires
+        # additional disclosure and verification, tested separately in v0.13.
+        out=recommendation(self.items,{**self.prefs, 'risk_tolerance':'MEDIUM'},demo_only=False)
         self.assertEqual(out['eligible_count'],3)
         self.assertEqual(len(out['ranked']),2)
         self.assertEqual(len(out['excluded']),2)

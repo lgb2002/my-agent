@@ -21,34 +21,94 @@ CATEGORY_TERMS = [
 ]
 
 
-def _money(text):
-    matches = list(MONEY.finditer(text))
-    if not matches:
-        return None
-    m = matches[-1]
-    unit = m.group(2).replace(' ', '')
-    multiplier = {'억': 100000000, '억원': 100000000, '천만': 10000000, '천만원': 10000000,
-                  '백만': 1000000, '백만원': 1000000, '만': 10000, '만원': 10000,
-                  '천원': 1000, '천': 1000, '원': 1}[unit]
-    return int(float(m.group(1).replace(',', '')) * multiplier)
+def _money_value(match):
+    unit = match.group(2).replace(' ', '')
+    multiplier = {'억': 100000000, '억원': 100000000, '천만': 10000000,
+                  '천만원': 10000000, '백만': 1000000, '백만원': 1000000,
+                  '만': 10000, '만원': 10000, '천원': 1000, '천': 1000,
+                  '원': 1}[unit]
+    return int(float(match.group(1).replace(',', '')) * multiplier)
 
 
-def _extract(text, profile):
+def _price_criteria(text, profile):
+    """Keep purchase budget separate from monthly operating expenses.
+
+    A line such as '예산 80만원, 월 운영비 5만원' must never set the
+    acquisition budget to 5만원. Amounts with no currency units are ignored.
+    """
+    monthly_prefix = re.compile(
+        r'(?:월\s*(?:운영비|유지비|비용|구독료|지출)|월별\s*(?:비용|운영비)|매달\s*(?:운영비|비용|유지비)?|월\s*최대)'
+        r'[^\d,;:.]{0,15}$', re.I)
+    purchase_prefix = re.compile(r'(?:구매\s*예산|인수\s*예산|예산|구매\s*금액|인수\s*금액|상한|최대|가격)'
+                                 r'[^\d,;:.]{0,12}$', re.I)
+    purchase = []
+    monthly = []
+    for match in MONEY.finditer(text):
+        value = _money_value(match)
+        if not 0 < value <= 1000000000:
+            continue
+        prefix = text[max(0, match.start()-40):match.start()]
+        if monthly_prefix.search(prefix):
+            monthly.append(value)
+        else:
+            purchase.append((value, bool(purchase_prefix.search(prefix))))
+    if purchase:
+        explicit = [v for v, labeled in purchase if labeled]
+        profile['max_budget_krw'] = (explicit or [v for v, _ in purchase])[-1]
+    if monthly:
+        profile['max_monthly_cost_krw'] = monthly[-1]
+
+
+def _risk_value(text, waiting=''):
+    """Interpret Korean risk expressions without joining word boundaries.
+
+    Collapsing whitespace used to turn '중급이고 위험...' into a false
+    '고위험' match. Prefer clear stated constraints; otherwise ask.
+    """
+    s = re.sub(r'\s+', ' ', text.lower()).strip()
+    low = (
+        r'저\s*위험|보수적|안전|안정|위험\s*최소|리스크\s*최소|'
+        r'(?:위험|리스크)\s*(?:은|는|이|가|도|을|를)?\s*(?:낮|적|작|싫|없|줄이)|'
+        r'(?:낮|적|작)\w*\s*(?:위험|리스크)|'
+        r'(?:위험|리스크)\s*부담\s*(?:없|적)|'
+        r'위험을\s*피하|리스크를\s*피하|(?:위험|리스크)\s*감수\s*(?:적|낮|못|안)'
+    )
+    high = (
+        r'고위험|높은\s*위험|높은\s*리스크|'
+        r'(?:위험|리스크)\s*(?:은|는|이|가|도)?\s*(?:높|크|많)\w*\s*(?:괜찮|감수|상관없)|'
+        r'위험\s*감수|리스크\s*감수|공격적|도전적'
+    )
+    medium = r'중위험|중간\s*위험|보통\s*(?:위험|리스크)|위험\s*보통|리스크\s*보통'
+    if re.search(low, s):
+        return 'LOW'
+    if re.search(high, s):
+        return 'HIGH'
+    if re.search(medium, s):
+        return 'MEDIUM'
+    if waiting == 'risk_tolerance':
+        if re.fullmatch(r'(?:낮\w*|적\w*|작\w*|싫\w*|안전\w*|보수적\w*)[.!?\s]*', s):
+            return 'LOW'
+        if re.fullmatch(r'(?:보통|중간|중간정도|적당히)[.!?\s]*', s):
+            return 'MEDIUM'
+        if re.fullmatch(r'(?:높\w*|크\w*|많\w*|공격적\w*|감수할\s*수\s*있어)[.!?\s]*', s):
+            return 'HIGH'
+    return None
+
+
+def _extract(text, profile, waiting=''):
     s = text.lower().replace(' ', '')
-    if '수익' in s or '매출' in s or '돈벌' in s:
+    if any(k in s for k in ('수익', '매출', '돈벌', '부업', '수익화', '소득')):
         profile['objective'] = '수익 창출 및 운영'
-    elif any(k in s for k in ('학습', '배우', '공부', '연습')):
+    elif any(k in s for k in ('학습', '배우', '공부', '연습', '공부용')):
         profile['objective'] = '개발 학습'
     elif '포트폴리오' in s:
         profile['objective'] = '포트폴리오 제작'
     elif any(k in s for k in ('재판매', '되팔', '엑싯')):
         profile['objective'] = '인수 후 개선·재판매'
-    elif any(k in s for k in ('직접운영', '운영하고', '서비스운영', '창업')):
+    elif any(k in s for k in ('직접운영', '운영하고', '서비스운영', '운영할', '창업')):
         profile['objective'] = '서비스 운영'
 
-    val = _money(text)
-    if val is not None and 0 < val <= 1000000000:
-        profile['max_budget_krw'] = val
+    _price_criteria(text, profile)
 
     # Avoid treating JavaScript as a request for Java, for example.
     stacks = []
@@ -63,38 +123,67 @@ def _extract(text, profile):
         profile['preferred_tech_stack'] = stacks[:10]
         # A requested project technology is a strict filter. Merely saying the
         # user has experience with it is not the same as requiring that stack.
-        strict = bool(re.search(r"프로젝트|기반|사용한|만든|개발된|필수|만\s*추천|으로\s*만든|으로\s*개발", text))
-        if strict:
-            profile['require_preferred_stack'] = True
+        strict = bool(re.search(
+            r'(?:\b(?:python|react|vue|django)\b|파이썬|리액트|장고|스프링).{0,17}(?:프로젝트|기반|사용한|만든|개발된|필수|만\s*추천|으로\s*만든|으로\s*개발)|'
+            r'(?:프로젝트|필수|반드시|꼭).{0,16}(?:\b(?:python|react|vue|django)\b|파이썬|리액트|장고|스프링)',
+            text, re.I))
+        # Mentioning skill ('파이썬 중급') is not a hard requirement.
+        # But '파이썬 중급, Python 프로젝트 추천' *is* explicit.
+        explicit_target = re.search(
+            r'(?:\b(?:python|react|vue|django)\b|파이썬|리액트|장고|스프링)\s*'
+            r'(?:기반|프로젝트|웹앱|으로\s*(?:개발|만든))|'
+            r'(?:프로젝트|웹앱)\s*(?:는|은|중에)?\s*'
+            r'(?:\b(?:python|react|vue|django)\b|파이썬|리액트|장고|스프링)',
+            text, re.I)
+        mentions_skill = re.search(
+            r'(?:\b(?:python|react|vue|django)\b|파이썬|리액트|장고).{0,8}'
+            r'(?:중급|초급|고급|경험|할\s*줄)', text, re.I)
+        if mentions_skill and not explicit_target and not re.search(
+                r'(?:기반|만든|사용한)\s*프로젝트|필수|만\s*추천|꼭\s*해당', text):
+            strict = False
+        if explicit_target:
+            strict = True
+        profile['require_preferred_stack'] = strict
 
     for label, categories in CATEGORY_TERMS:
         if label.lower().replace(' ', '') in s:
             profile['preferred_categories'] = categories
             break
 
-    if '초보' in s or '입문' in s or '개발경험없' in s or '개발못' in s:
+    if any(x in s for x in ('초보', '입문', '개발경험없', '개발못', '개발안해', '개발처음', '코딩못')):
         profile['skill_level'] = 'NONE'
-    elif '기초' in s or '기본수준' in s or '초급' in s:
+    elif any(x in s for x in ('기초', '기본수준', '초급', '개발약간')):
         profile['skill_level'] = 'BASIC'
-    elif '중급' in s or '어느정도' in s:
+    elif any(x in s for x in ('중급', '어느정도', '중간수준')):
         profile['skill_level'] = 'INTERMEDIATE'
-    elif '고급' in s or '숙련' in s or '전문가' in s:
+    elif any(x in s for x in ('고급', '숙련', '전문가', '시니어')):
         profile['skill_level'] = 'ADVANCED'
+    elif waiting == 'skill_level' and s in ('조금', '약간', '기본만', '기초정도'):
+        profile['skill_level'] = 'BASIC'
 
-    if any(x in s for x in ('저위험', '보수적', '안정적인', '위험싫', '위험낮', '안전하게', '위험적게')):
-        profile['risk_tolerance'] = 'LOW'
-    elif any(x in s for x in ('고위험', '위험감수', '공격적', '도전적')):
-        profile['risk_tolerance'] = 'HIGH'
-    elif '중위험' in s or '중간위험' in s or '보통위험' in s or s in ('보통','중간'):
-        profile['risk_tolerance'] = 'MEDIUM'
+    risk = _risk_value(text, waiting)
+    if risk:
+        profile['risk_tolerance'] = risk
 
-    # An explicit maximum recurring expense is optional; no silent 30k cap.
-    if re.search(r"월\s*(?:운영비|비용)", text):
-        after = re.search(r"월\s*(?:운영비|비용)[^\d]{0,12}(\d[\d,.]*\s*(?:만원|천원|원|만))", text)
-        if after:
-            v = _money(after.group(1))
-            if v is not None:
-                profile['max_monthly_cost_krw'] = v
+
+def _profile_summary(p):
+    labels = []
+    if p.get('objective'):
+        labels.append('목적: ' + str(p['objective'])[:40])
+    if p.get('max_budget_krw'):
+        labels.append('예산: {:,}원 이하'.format(p['max_budget_krw']))
+    if p.get('skill_level'):
+        labels.append('개발 수준: ' + {'NONE':'초보', 'BASIC':'기초', 'INTERMEDIATE':'중급', 'ADVANCED':'고급'}.get(p['skill_level'], '확인 필요'))
+    if p.get('risk_tolerance'):
+        labels.append('위험 허용: ' + {'LOW':'낮음', 'MEDIUM':'보통', 'HIGH':'높음'}.get(p['risk_tolerance'], '확인 필요'))
+    if p.get('preferred_tech_stack'):
+        stack_text = ', '.join(p['preferred_tech_stack'][:3])
+        labels.append(('필수 기술: ' if p.get('require_preferred_stack') else '익숙한 기술: ') + stack_text)
+    if p.get('max_monthly_cost_krw') is not None:
+        labels.append('월 운영비: {:,}원 이하'.format(p['max_monthly_cost_krw']))
+    if p.get('qualitative_preferences'):
+        labels.append('추가 선호: ' + ', '.join(p['qualitative_preferences'][:2]))
+    return ' · '.join(labels)
 
 
 def _missing_question(p):
@@ -122,6 +211,8 @@ def _create_args(p):
             'preferred_categories': p.get('preferred_categories', []), 'max_results': 3}
     if 'max_monthly_cost_krw' in p:
         args['max_monthly_cost_krw'] = p['max_monthly_cost_krw']
+    if p.get('qualitative_preferences'):
+        args['qualitative_preferences'] = p['qualitative_preferences'][:5]
     return args
 
 
@@ -138,6 +229,9 @@ def advance(message, context):
     if state and CANCEL_REQUEST.match(message.strip()):
         context.pop('recommendation_intake', None)
         return {'message': '맞춤 추천 조건 입력을 취소했어. 다른 요청을 해줘.'}
+    # An independent tool request should not be swallowed by an ongoing form.
+    if state and not interested and re.search(r'(?:매물\s*(?:목록|검색)|최근\s*작업|작업\s*기록|제안\s*내역)', message):
+        return None
     if not state:
         state = {'profile': {}, 'waiting': ''}
         context['recommendation_intake'] = state
@@ -147,7 +241,7 @@ def advance(message, context):
         p[field] = 'BASIC' if field == 'skill_level' else 'MEDIUM'
         p.setdefault('assumptions', []).append('개발 수준: 기초 가정' if field == 'skill_level' else '위험 허용: 보통 가정')
     else:
-        _extract(message, p)
+        _extract(message, p, state['waiting'])
         if state['waiting'] == 'objective' and not p.get('objective') and not interested and len(message.strip()) >= 3:
             # A free-text purpose should not be thrown away simply because it
             # does not match one of the example keywords.
@@ -158,10 +252,13 @@ def advance(message, context):
             if not p.get(field):
                 state['waiting'] = field
                 break
-        return {'message': question}
+        known = _profile_summary(p)
+        reply = ('**확인한 조건:** ' + known + '\n\n' if known else '') + question
+        return {'message': reply}
     context['confirmed_recommendation'] = dict(p)
     context.pop('recommendation_intake', None)
-    return {'args': _create_args(p), 'assumptions': p.get('assumptions', [])}
+    return {'args': _create_args(p), 'assumptions': p.get('assumptions', []),
+            'criteria_summary': _profile_summary(p)}
 
 
 def from_saved_profile(payload):

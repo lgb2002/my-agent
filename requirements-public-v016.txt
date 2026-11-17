@@ -1,0 +1,4 @@
+# Append these to your existing pip freeze requirements.txt when deploying.
+# Required to enforce shared daily/model budgets in Streamlit Cloud.
+psycopg[binary]>=3.2,<4
+# Optional for OIDC login: pip install 'streamlit[auth]' (includes Authlib)

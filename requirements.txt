@@ -40,6 +40,8 @@ packaging==26.3
 pandas==3.1.1
 pillow==13.0.0
 protobuf==7.36.2
+psycopg==3.3.9
+psycopg-binary==3.3.9
 pyarrow==26.0.1
 pydantic==2.14.3
 pydantic_core==2.50.4

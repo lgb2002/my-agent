@@ -102,6 +102,23 @@ section.main > div.block-container, [data-testid="stMainBlockContainer"] {
 [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] p {font-size:14px;line-height:1.75;}
 [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] li {font-size:14px;line-height:1.65;margin-bottom:4px;}
 [data-testid="stChatMessage"] [data-testid="stExpander"] {border:1px solid #E5ECE4;border-radius:9px;background:#FBFCFA;}
+/* A visible but quiet trace connects each AI result to the executed tool.
+   Structured payloads remain on-demand, not dumped into chat. */
+.tool-activity {display:flex;align-items:center;gap:9px;margin:10px 0 6px;
+  padding:8px 11px;border:1px solid #DAE7DF;border-radius:8px;
+  background:#F8FAF7;color:#244938;font-size:12.5px;line-height:1.4;}
+.tool-activity-indicator {width:7px;height:7px;flex:0 0 7px;border-radius:50%;background:#337857;}
+.tool-activity-name {font-weight:700;letter-spacing:-.01em;}
+.tool-activity-state {margin-left:auto;font-size:12px;color:#42634C;}
+.tool-activity-problem {background:#FFFBF8;border-color:#ECD9CF;color:#79412D;}
+.tool-activity-problem .tool-activity-indicator {background:#A65D44;}
+.tool-activity-problem .tool-activity-state {color:#79412D;}
+.conversation-actions-label {font-size:12px;color:#566C5F;font-weight:650;
+  margin:15px 0 8px;}
+.st-key-conversation_shortcuts_v11 .stButton > button {min-height:36px;
+  border:1px solid #DAE5DA;border-radius:8px;font-size:12.5px;
+  background:#fff;color:#295447;}
+.st-key-conversation_shortcuts_v11 .stButton > button:hover {background:#F4F8F3;}
 /* Conversation scroll is owned by Streamlit's height-limited container.
    Avoid styling overflow/position on Streamlit's internal scroll wrapper:
    that is fragile across Streamlit releases and can trap old messages. */
@@ -136,6 +153,9 @@ section.main > div.block-container, [data-testid="stMainBlockContainer"] {
   .st-key-welcome_actions .suggestion-hint {margin-bottom:11px;}
   [data-testid="stChatMessage"] {padding:.78rem .78rem;}
   [data-testid="stChatInput"] textarea {font-size:14px !important;}
+  .tool-activity {flex-wrap:wrap;gap:6px;padding:7px 9px;}
+  .tool-activity-state {margin-left:auto;}
+  .conversation-actions-label {margin-top:11px;}
 }
 @media (prefers-reduced-motion:reduce) {
   .st-key-welcome_actions .stButton > button,

@@ -370,6 +370,13 @@ class ChatFirstToolTest(unittest.TestCase):
         model_module.ChatOpenAI=lambda **kw: None
         class FakeModel:
             def __init__(self): self.calls=0; self.bound_tools=[]
+            def with_structured_output(self, schema, **kwargs):
+                from agent.llm_intake import RecommendationTurn
+                class Structured:
+                    def invoke(self, messages):
+                        from tests.test_llm_routing_v012 import turn
+                        return turn(intent='other')
+                return Structured()
             def bind_tools(self, tools, **kwargs): self.bound_tools=tools; return self
             def invoke(self, messages):
                 self.calls+=1

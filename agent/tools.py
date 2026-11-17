@@ -28,7 +28,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "type": "function", "function": {
-            "name": "recommend_listings", "description": "구매 예산, 기술 수준 및 위험 허용도에 따라 매물을 규칙 기반으로 평가하고 추천 작업을 저장합니다.",
+            "name": "recommend_listings", "description": "예산·기술·위험 조건으로 안전한 후보를 1차 선별합니다. 정성 선호가 있으면 별도 AI 평가로 순위를 보완합니다.",
             "parameters": {"type": "object", "properties": {
                 "max_budget_krw": {"type": "integer", "description": "사용자가 실제로 제시한 원화 예산 상한"},
                 "max_monthly_cost_krw": {"type": "integer", "description": "사용자가 제시한 월 운영비 상한. 없으면 생략"},
@@ -294,7 +294,8 @@ class ToolDispatcher:
                          'preferred_tech_stack': tech,
                          'require_preferred_stack': bool(confirmed.get('require_preferred_stack')),
                          'preferred_categories': confirmed.get('preferred_categories', []),
-                         'max_results': 3}
+                         'max_results': 3,
+                         'qualitative_preferences': confirmed.get('qualitative_preferences') or []}
                 job = self.request('POST', '/api/agent/v1/jobs', {'task_type': 'RECOMMEND', 'preferences': prefs}, write=True)
                 full = self.request('GET', '/api/agent/v1/jobs/' + job['job_id'])
                 self.context['last_job_id'] = job['job_id']
@@ -306,7 +307,17 @@ class ToolDispatcher:
                 data = {'job_id': job['job_id'], 'ranked': ranked,
                         'excluded': result.get('excluded', []),
                         'eligible_count': result.get('eligible_count', len(ranked)),
-                        'criteria': prefs, 'status': full['status']}
+                        'criteria': prefs, 'status': full['status'],
+                        'candidate_pool': result.get('candidate_pool', []),
+                        'qualitative_preferences': result.get('qualitative_preferences', []),
+                        'qualitative_review_status': result.get('qualitative_review_status', 'NOT_RUN'),
+                        'excluded_count': len(result.get('excluded', [])),
+                        'excluded_reasons': list(dict.fromkeys(
+                            reason for item in result.get('excluded', [])
+                            for reason in item.get('reasons', [])))[:5],
+                        'risk_exclusions': [x for x in result.get('excluded', [])
+                                            if any('저위험' in reason or '검증' in reason
+                                                   for reason in x.get('reasons', []))][:3]}
                 summary = ('맞춤 조건에 맞는 후보가 없습니다. 필요한 조건만 완화해 다시 추천받을 수 있어요.'
                            if not ranked else '조건에 맞는 후보 {}건 중 상위 {}건을 보여드려요.'.format(
                                data['eligible_count'], len(ranked)))
@@ -340,8 +351,16 @@ class ToolDispatcher:
                         "buyer_id": o.get("buyer_id"), "seller_id": o.get("seller_id")} for o in offers]}
                 summary = "{}의 협상 제안 {}건을 조회했어요.".format(listing["title"], len(offers))
             elif name == "prepare_offer":
-                if AGENT_MODE != "mock" or self.actor_name != "구매자 B":
-                    raise ValueError("구매자 DEMO에서만 제안 초안을 만들 수 있어요. 실플랫폼 변경은 차단돼요.")
+                from core.config import ENABLE_LIVE_DRAFTS
+                if AGENT_MODE == 'live' and not ENABLE_LIVE_DRAFTS:
+                    raise ValueError('플랫폼 초안 제출이 현재 비활성화되어 있습니다.')
+                if AGENT_MODE == 'mock' and self.actor_name != '구매자 B':
+                    raise ValueError('DEMO에서는 구매자만 제안 초안을 준비할 수 있습니다.')
+                live_principal = None
+                if AGENT_MODE == 'live':
+                    _client, live_principal = self.runtime.authenticated()
+                    if not str(live_principal.get('id') or '') or 'offer:draft' not in (live_principal.get('scopes') or []):
+                        raise ValueError('위임 토큰에 offer:draft 권한이 필요합니다.')
                 listing = self._listing(args.get("listing"))
                 price = int(args.get("price_krw"))
                 if not 0 < price <= 1000000000:
@@ -349,10 +368,14 @@ class ToolDispatcher:
                 message = str(args.get("message") or "")[:1000].strip()
                 if not message:
                     raise ValueError("제안 메시지를 입력해줘.")
-                pending = {"kind": "offer_draft", "listing_id": listing["id"], "listing_title": listing["title"],
+                pending = {"kind": "live_offer_draft" if AGENT_MODE == 'live' else "offer_draft", "listing_id": listing["id"], "listing_title": listing["title"],
                            "price_krw": price, "message": message, "actor": self.actor_name, "token": uuid.uuid4().hex}
-                data = {"listing_title": listing["title"], "price_krw": price, "message": message}
-                summary = "{}에 {:,}원 제안 내용을 준비했어요. 아래 확인 버튼을 누르기 전에는 초안을 생성하지 않아요.".format(listing["title"], price)
+                if live_principal:
+                    if listing.get('seller_id') == live_principal['id']:
+                        raise ValueError('본인 매물에는 제안할 수 없습니다.')
+                    pending['principal_id'] = live_principal['id']
+                data = {"listing_title": listing["title"], "listing_id": listing["id"], "price_krw": price, "message": message}
+                summary = "{}에 {:,}원 제안 내용을 준비했어요. 플랫폼 승인 전에는 제안이 전송되지 않아요.".format(listing["title"], price)
             elif name == "prepare_counter_offer":
                 if AGENT_MODE != "mock" or self.actor_name != "판매자 A":
                     raise ValueError("판매자 DEMO에서만 역제안을 준비할 수 있어요.")
