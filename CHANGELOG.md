@@ -1,3 +1,10 @@
+## v0.18.3 — Streamlit Cloud 의존성 직접 선언 (2026-11-17)
+
+- 루트 `requirements.txt`에 `cryptography>=43,<50`, `authlib>=1.3.2,<2`, `psycopg[binary]>=3.2,<4`를 포함한 실행 의존성을 직접 선언.
+- 별도 의존성 준비 스크립트 없이 GitHub 배포 시 설치되도록 수정.
+- Agent v0.18.1 비즈니스 로직, OAuth Broker, UI, 거래 정책, 개인 데이터 구조는 변경 없음.
+- 기존 사용자 소유 `requirements.txt`의 추가 항목이 있다면 병합 후 배포. 실플랫폼 OAuth 통합 검증은 미완료.
+
 ## v0.18 — 플랫폼 v0.23 OIDC 통합 로그인 클라이언트 (2026-11-17)
 
 - 수동 위임 토큰 입력 UI 제거, ProjectAgain 계정 로그인·로그아웃 제공.

@@ -1,3 +1,17 @@
+# ProjectAgain Agent v0.18.3 — Streamlit Cloud 의존성 직접 반영
+
+이번 버전은 Streamlit Cloud가 읽는 루트 `requirements.txt`를 **직접 포함**합니다.
+`cryptography`, `authlib`, `psycopg[binary]` 및 기존 실행 필수 의존성을 함께 선언했으며,
+별도 설치 스크립트는 필요하지 않습니다. GitHub의 `app.py`와 같은 위치에 있는 `requirements.txt`를
+이 파일로 업데이트한 뒤 커밋·푸시하면 됩니다.
+
+기존 GitHub `requirements.txt`에 프로젝트 외 추가 패키지가 있었다면 해당 항목은 삭제하지 말고 새 파일에
+유지해 주세요. `.env`, `.venv`, `data/`, 실제 Streamlit Secrets 및 PostgreSQL 사용자 데이터는 변경하지 않습니다.
+앱 기능, API 권한, OAuth Broker 로직, DESIGN.md는 v0.18.1 그대로입니다.
+실제 Streamlit Cloud/플랫폼 통합 검증은 별도입니다.
+
+---
+
 # ProjectAgain Agent v0.18 — 통합 로그인 적용 (플랫폼 v0.23 연동)
 
 이번 버전부터 사용자는 **ProjectAgain 계정으로 로그인** 버튼으로 연결합니다. 에이전트 안에 위임 토큰을 복사·붙여넣는 입력창은 없습니다. 단, **플랫폼 v0.23의 OAuth/OIDC 활성화 및 실제 배포가 선행**되어야 개인 기능을 이용할 수 있습니다. 실운영 로그인 왕복은 아직 검증하지 않았습니다.
