@@ -80,7 +80,8 @@ class VisualSystemV0174Tests(unittest.TestCase):
             self.assertIn(rule, css)
         self.assertIn('overflow-x:auto', css)
         self.assertIn('.mobile-table-cue {display:block', css)
-        self.assertNotIn('overflow-y:auto', css)
+        self.assertIn('.st-key-sidebar_recent_v0189', css)  # only history list scrolls, not main transcript
+        self.assertNotIn('.st-key-conversation_history_v0174 {overflow-y:auto', css)
 
     def test_real_app_uses_layout_state_and_evidence_rows(self):
         src = (ROOT/'app.py').read_text(encoding='utf-8')

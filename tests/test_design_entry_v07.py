@@ -18,21 +18,21 @@ class EntryDesignTests(unittest.TestCase):
                 examples = ast.literal_eval(node.value)
                 break
         self.assertIsNotNone(examples)
-        self.assertEqual([r[0] for r in examples], ['01', '02', '03', '04'])
-        self.assertEqual(len({r[1] for r in examples}), 4)
+        self.assertEqual([r[0] for r in examples], ['매물 탐색', '맞춤 추천', '인수 전 검토', '이전 작업'])
+        self.assertEqual(len({r[0] for r in examples}), 4)
         targets = ['search_listings', 'recommend_listings', 'help', 'get_recent_jobs']
         for option, target in zip(examples, targets):
-            with self.subTest(label=option[1]):
-                self.assertEqual(offline_intent(option[3], {})[0], target)
+            with self.subTest(label=option[0]):
+                self.assertEqual(offline_intent(option[1], {})[0], target)
         # Inspect preparation is explanatory until a listing is explicitly selected.
-        self.assertNotEqual(examples[0][3], examples[2][3])
+        self.assertNotEqual(examples[0][1], examples[2][1])
 
     def test_ui_chrome_keeps_native_streamlit_controls(self):
         source = (ROOT / 'app.py').read_text(encoding='utf-8')
-        self.assertIn('with st.container(key="welcome_actions"):', source)
-        self.assertIn('for start in (0, 2):', source)  # row-major mobile reading order
+        self.assertIn("with st.container(key='welcome_actions'):", source)
+        self.assertIn('quick_cols = st.columns(4', source)  # compact row, mobile CSS wraps to 2 columns
         self.assertIn('st.chat_input(', source)
-        self.assertIn('st.button(title, width="stretch"', source)
+        self.assertIn("st.button(title, width='stretch'", source)
         self.assertIn('pending_prompt = prompt', source)
         self.assertIn('submit_confirmed_draft(', source)
         self.assertIn('st.rerun()', source)

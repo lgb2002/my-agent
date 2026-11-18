@@ -1,0 +1,31 @@
+{
+  "base": "v0.18.8",
+  "prior_file_count": 206,
+  "previous_files_missing": [],
+  "updated_files": [
+    "CHANGELOG.md",
+    "DESIGN.md",
+    "README.md",
+    "app.py",
+    "assets/style.css",
+    "docs/test_results.json",
+    "docs/test_run.log",
+    "tests/test_chat_workspace_v010.py",
+    "tests/test_design_entry_v07.py",
+    "tests/test_visual_design_v0174.py"
+  ],
+  "new_files": [
+    "core/chat_attachments.py",
+    "docs/COMPACT_SHELL_V0189.md",
+    "docs/compact_shell_static_1280px_v0189.png",
+    "docs/compact_shell_static_390px_v0189.png",
+    "docs/compact_shell_static_768px_v0189.png",
+    "docs/compact_shell_static_qa_v0189.json",
+    "docs/verify_compact_shell_static_v0189.py",
+    "tests/test_compact_shell_v0189.py"
+  ],
+  "sensitive_data_preserved": true,
+  "auth_broker_untouched": true,
+  "requirements_unchanged": true,
+  "streamlit_cloud_e2e_verified": false
+}

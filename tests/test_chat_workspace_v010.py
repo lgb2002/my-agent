@@ -36,7 +36,8 @@ class ChatWorkspaceV010Tests(unittest.TestCase):
 
     def test_ui_default_demo_and_scrollable_native_chat(self):
         source=(ROOT/'app.py').read_text(encoding='utf-8')
-        self.assertIn('st.checkbox("시연 매물 포함", value=True, key="include_demo_v10")', source)
+        self.assertIn("st.checkbox('시연 매물 포함'", source)
+        self.assertIn('include_demo_setting_v0189', source)
         self.assertIn('set_request_context(token=token, visitor_id=visitor, include_demo=show_demo)',source)
         self.assertNotIn('st.container(height=540',source)
         self.assertIn("for i, turn in enumerate(session['turns']):",source)

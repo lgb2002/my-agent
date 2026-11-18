@@ -1,0 +1,27 @@
+{
+  "scope": "static html/css fixture (not live Streamlit)",
+  "live_verified": false,
+  "viewports": [
+    {
+      "width": 390,
+      "doc": 390,
+      "quick_count": 4,
+      "quick_height": 44,
+      "has_input": true
+    },
+    {
+      "width": 768,
+      "doc": 768,
+      "quick_count": 4,
+      "quick_height": 36,
+      "has_input": true
+    },
+    {
+      "width": 1280,
+      "doc": 1280,
+      "quick_count": 4,
+      "quick_height": 36,
+      "has_input": true
+    }
+  ]
+}
