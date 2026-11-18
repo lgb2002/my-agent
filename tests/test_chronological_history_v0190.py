@@ -109,7 +109,7 @@ class StoredResultSafety(unittest.TestCase):
         app=(ROOT/'app.py').read_text(encoding='utf-8')
         css=(ROOT/'assets/style.css').read_text(encoding='utf-8')
         ast.parse(app)
-        self.assertIn("for i, turn in enumerate(session['turns']):",app)
+        self.assertIn('for i, turn in enumerate(visible_turns, start=offset):',app)
         self.assertNotIn("with st.expander('대화 기록 ·",app)
         self.assertNotIn('대화 문장만 불러왔어요.',app)
         self.assertNotIn('render_primary_workspace(workbench, session, actor)',app)

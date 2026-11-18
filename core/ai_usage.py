@@ -88,28 +88,22 @@ def storage_kind():
 @contextmanager
 def _db():
     url = _connection_string()
-    kind = storage_kind()
-    if kind == 'postgres':
-        if not url.startswith(('postgres://', 'postgresql://')):
-            raise AIAccessDenied('AI 사용량 저장소 URL은 PostgreSQL이어야 해요.')
-        try:
-            import psycopg
-            con = psycopg.connect(url, connect_timeout=5, sslmode='require')
-        except Exception:
-            raise AIAccessDenied('AI 사용량 저장소에 연결할 수 없어 유료 호출을 중지했어.') from None
-    else:
+    if storage_kind() != 'postgres':
         raise AIAccessDenied('공개 AI 사용에는 공용 PostgreSQL 저장소가 필요해요. 관리자가 설정해야 해요.')
+    if not url.startswith(('postgres://', 'postgresql://')):
+        raise AIAccessDenied('AI 사용량 저장소 URL은 PostgreSQL이어야 해요.')
     try:
-        # Global advisory lock: two app replicas cannot pass budget checks concurrently.
-        con.execute('SELECT pg_advisory_xact_lock(1736501601)')
-        con.execute(_SCHEMA)
-        yield con, kind
-        con.commit()
-    except Exception:
-        con.rollback()
+        from core.pg_pool import connection
+        with connection(url) as con:
+            # The transaction lock serializes concurrent budget reservations,
+            # including calls from different replicas. Never cache usage quotas.
+            con.execute('SELECT pg_advisory_xact_lock(1736501601)')
+            con.execute(_SCHEMA)
+            yield con, 'postgres'
+    except AIAccessDenied:
         raise
-    finally:
-        con.close()
+    except Exception:
+        raise AIAccessDenied('AI 사용량 저장소 연결 또는 처리에 실패했어. 안전을 위해 유료 호출을 중단했어.') from None
 
 
 def _periods(identity, now):

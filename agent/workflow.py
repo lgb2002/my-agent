@@ -199,7 +199,7 @@ def _safe_summary(event, formatter):
 
 
 def execute_plan(plan, context, actor_name, *, recommendation_input=None,
-                 formatter, model=None, allow_resume=False):
+                 formatter, model=None, allow_resume=False, progress=None):
     """Run bounded steps until user input, authorization, or an error blocks it.
 
     A step already COMPLETED/PARTIAL is NEVER invoked twice by resume.
@@ -210,6 +210,18 @@ def execute_plan(plan, context, actor_name, *, recommendation_input=None,
     if not isinstance(plan, dict) or plan.get('status') in ('CANCELLED', 'COMPLETED'):
         return {'content': '진행 중인 작업 계획이 없어요.', 'events': [], 'pending': None, 'mode': 'workflow'}
     dispatcher = ToolDispatcher(actor_name, context)
+    def run_tool(name, args):
+        if progress:
+            progress('tool_start', name, None)
+        try:
+            event, pending = dispatcher.invoke(name, args)
+        except Exception:
+            if progress:
+                progress('tool_done', name, False)
+            raise
+        if progress:
+            progress('tool_done', name, bool(event.success))
+        return event, pending
     messages = []
     events = []
     pending = None
@@ -249,7 +261,7 @@ def execute_plan(plan, context, actor_name, *, recommendation_input=None,
         _mark(plan, step, 'RUNNING', '도구/검사 실행 중', context)
         try:
             if kind == 'recommend':
-                event, pending = dispatcher.invoke('recommend_listings', recommendation_input['args'])
+                event, pending = run_tool('recommend_listings', recommendation_input['args'])
                 events.append(event.to_dict())
                 if not event.success:
                     _mark(plan, step, 'FAILED', event.summary, context)
@@ -292,7 +304,7 @@ def execute_plan(plan, context, actor_name, *, recommendation_input=None,
                 selected = plan['ranked'][0]
                 lid = selected['listing_id']
                 # Reuse the same audited read-only inspection tool as normal chat.
-                event, _ = dispatcher.invoke('inspect_listing', {'listing': lid})
+                event, _ = run_tool('inspect_listing', {'listing': lid})
                 events.append(event.to_dict())
                 if not event.success:
                     _mark(plan, step, 'FAILED', event.summary, context)
@@ -316,7 +328,7 @@ def execute_plan(plan, context, actor_name, *, recommendation_input=None,
                     _end(plan, 'FAILED', context)
                     break
                 plan['offer_listing_id'] = selected['listing_id']
-                event, pending = dispatcher.invoke('prepare_offer', {
+                event, pending = run_tool('prepare_offer', {
                     'listing': selected['listing_id'],
                     'price_krw': plan['offer_price_krw'],
                     'message': '프로젝트 공개 정보 확인과 추후 인수 조건 협의를 전제로 구매 제안드립니다.',

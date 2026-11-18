@@ -27,6 +27,7 @@ def append_turn(session, role, content, **kwargs):
         session.pop('_historical_restore', None)
     session['turns'].append({'role': role, 'content': content, 'created_at': _now(), **kwargs})
     session['updated_at'] = datetime.now(timezone.utc).isoformat()
+    session['_chat_revision'] = int(session.get('_chat_revision', 0)) + 1
 
 
 def conversation_title(session):

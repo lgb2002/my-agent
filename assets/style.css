@@ -581,3 +581,56 @@ html,body,[data-testid="stApp"] {
 /* v0.19.0 cleanup: redundant sidebar shortcuts were removed in favor of the
    contextual actions on the welcome screen. */
 [data-testid="stSidebar"] .st-key-sidebar_chat_panel_v0188 .sidebar-chat-title {margin-top:17px !important;}
+
+/* v0.19.1 — real compact sidebar controls. Keep main workflow/approval
+   buttons at the accessible size required by the existing design system. */
+@media (min-width:761px) {
+  [data-testid="stSidebar"] .st-key-sidebar_chat_panel_v0188 .st-key-chat_new_v0187 button,
+  [data-testid="stSidebar"] .st-key-sidebar_chat_panel_v0188 button[kind="primary"] {
+    min-height:35px !important;height:35px !important;max-height:35px !important;
+    padding:0 10px !important;font-size:.84rem !important;line-height:1.12 !important;
+    border-radius:8px !important;
+  }
+}
+[data-testid="stSidebar"] .brand {margin-bottom:9px !important;}
+[data-testid="stSidebar"] .st-key-sidebar_chat_panel_v0188 .sidebar-chat-title {
+  margin:16px 0 8px !important;
+}
+[data-testid="stSidebar"] .st-key-sidebar_recent_v0189 {
+  margin-top:7px !important;padding-top:6px !important;
+}
+[data-testid="stSidebar"] .st-key-sidebar_account_panel_v0188 {
+  padding:7px 0 3px !important;margin-top:3px !important;
+}
+[data-testid="stSidebar"] .st-key-sidebar_account_panel_v0188 [data-testid="stPopover"] button {
+  min-height:36px !important;height:36px !important;max-height:36px !important;
+  padding:0 11px !important;font-size:.82rem !important;line-height:1.2 !important;
+  border-radius:8px !important;
+}
+/* Popover content is rendered in a portal outside stSidebar. Its inner
+   keyed container scopes rules to the account menu, not other popovers. */
+.st-key-compact_account_popover_v0191 [data-testid="stVerticalBlock"] {
+  gap:5px !important;
+}
+.st-key-compact_account_popover_v0191 [data-testid="stButton"] button,
+.st-key-compact_account_popover_v0191 [data-testid="stLinkButton"] a {
+  min-height:34px !important;height:34px !important;max-height:34px !important;
+  padding:0 11px !important;line-height:1.2 !important;
+  font-size:.81rem !important;border-radius:8px !important;
+}
+.st-key-compact_account_popover_v0191 [data-testid="stCaptionContainer"] {
+  margin:2px 0 3px !important;
+}
+@media (max-width:760px) {
+  [data-testid="stSidebar"] .st-key-sidebar_chat_panel_v0188 button[kind="primary"] {
+    min-height:44px !important;height:44px !important;max-height:44px !important;
+    padding:0 12px !important;
+  }
+  [data-testid="stSidebar"] .st-key-sidebar_account_panel_v0188 [data-testid="stPopover"] button {
+    height:44px !important;min-height:44px !important;
+  }
+  .st-key-compact_account_popover_v0191 [data-testid="stButton"] button,
+  .st-key-compact_account_popover_v0191 [data-testid="stLinkButton"] a {
+    min-height:44px !important;height:44px !important;max-height:44px !important;
+  }
+}

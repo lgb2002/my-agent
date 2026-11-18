@@ -84,6 +84,16 @@ def _connect():
 
 @contextmanager
 def _db_connection():
+    # Use a bounded pool for PostgreSQL. SQLite tests retain their per-call DB
+    # path so patching LOCAL_DB in isolated test runs remains effective.
+    url = os.environ.get('AGENT_STATE_DATABASE_URL', '').strip()
+    if url:
+        if not url.startswith(('postgresql://', 'postgres://')):
+            raise ValueError('AGENT_STATE_DATABASE_URL must be a PostgreSQL URL')
+        from core.pg_pool import connection
+        with connection(url) as con:
+            yield con
+        return
     con = _connect()
     try:
         with con:

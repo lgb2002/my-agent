@@ -44,6 +44,9 @@ from core.chat_archive_store import (save_conversation, list_conversations, load
 from core.chat_history_snapshot import capture_event, refresh_prompt  # noqa: E402
 from core.chat_navigation import (visible_conversations, transcript_fingerprint,
     search_conversations, conversation_group)  # noqa: E402
+from core.chat_performance import (cloud_list, invalidate_cloud_list,
+    conversation_revision, visible_tail, DEFAULT_VISIBLE_TURNS, MORE_VISIBLE_TURNS)  # noqa: E402
+from core.activity_progress import ProgressMetrics, describe_tool  # noqa: E402
 from core.ux_actions import suggested_actions, friendly_state, tool_result_label, request_requires_account  # noqa: E402
 from core.workflow_store import (verified_owner, save_preferences, load_preferences,
     delete_preferences, list_workflows, load_workflow, delete_workflow, storage_kind, storage_health)  # noqa: E402
@@ -63,6 +66,20 @@ def get_session(scope, legacy_scopes=()):
 
 def add_turn(session, role, content, **kwargs):
     append_turn(session, role, content, **kwargs)
+
+
+def _request_conversation_selection(cid):
+    """Schedule only the ID. Actual authorization is checked in the script."""
+    st.session_state['chat_requested_v0191'] = cid
+
+
+def _request_new_conversation():
+    st.session_state['chat_new_requested_v0191'] = True
+
+
+def _toggle_conversation_menu(cid):
+    old = st.session_state.get('chat_actions_open_v0187')
+    st.session_state['chat_actions_open_v0187'] = None if old == cid else cid
 
 
 def show_recommendation_snapshot(data, idx, turn_id):
@@ -837,6 +854,17 @@ def show_settings_dialog(scope, current, active_archive, cloud_owner, actor,
                     st.rerun()
 
     with account_tab:
+        perf = st.session_state.get('last_performance_v0191')
+        if isinstance(perf, dict):
+            with st.expander('최근 요청 처리 시간', expanded=False):
+                st.caption('마지막 요청 · 전체 {:.1f}초 / AI 호출 {:.1f}초 / 도구 실행 {:.1f}초'.format(
+                    perf.get('total_s', 0), perf.get('model_s', 0), perf.get('tool_s', 0)))
+                stages = st.session_state.get('recent_stage_times_v0191') or {}
+                if stages:
+                    st.caption('최근 인증 {:.1f}초 · 대화 목록 {:.1f}초 · 대화 불러오기 {:.1f}초 · 화면 구성 {:.1f}초'.format(
+                        stages.get('auth', 0), stages.get('list', 0),
+                        stages.get('load', 0), stages.get('render', 0)))
+                st.caption('Streamlit 서버 기준 측정치이며 브라우저 전송·렌더링 지연은 포함되지 않아요.')
         st.markdown('**ProjectAgain 계정**')
         st.caption('계정 연결됨 · 인증 정보 자동 갱신' if connected else '계정 연결 후 개인 API와 AI 작업을 이용할 수 있어요.')
         if ai_identity and ENABLE_OPENAI_CHAT and OPENAI_API_KEY:
@@ -891,6 +919,7 @@ with st.sidebar:
         'PROJECTAGAIN_BROKER_CLIENT_ID','PROJECTAGAIN_BROKER_CLIENT_SECRET',
         'PROJECTAGAIN_API_ORIGIN','AGENT_BROKER_STORE_KEY',
         'PROJECTAGAIN_BROKER_REDIRECT_URL'))
+    auth_started_v0191 = time.perf_counter()
     with account_panel:
         if broker_requested:
             login,refresh_handler=broker_connect_ui(MARKETPLACE_BASE_URL,configured)
@@ -932,6 +961,8 @@ with st.sidebar:
                                  type='primary', width='stretch'):
                         st.login()
         # AI quota details moved into Settings. Login and scope warnings stay visible.
+    st.session_state.setdefault('recent_stage_times_v0191', {})['auth'] = round(
+        time.perf_counter() - auth_started_v0191, 3)
     with chat_panel:
         owner_scope = login.owner_key[:12] if connected else visitor
         scope = conversation_scope('live', actor, owner_scope)
@@ -964,26 +995,61 @@ with st.sidebar:
         # Verified account transcripts save by default. Legacy v0.18.7 saved
         # opt-out preferences are no longer used, but their table and past records
         # remain untouched. Anonymous visitors always stay in browser memory.
-        cloud_owner = verified_owner(actor) if connected and storage_kind() == 'postgres' else None
+        # resolve_broker/resolve_login have already verified both UserInfo and
+        # /auth/me for this run. Re-verifying via AgentRuntime here would repeat
+        # API calls on every sidebar interaction; NEVER trust an unverified ID.
+        cloud_owner = login.owner_key if connected and login and storage_kind() == 'postgres' else None
         cloud_rows = []
+        cloud_list_cache = st.session_state.setdefault('cloud_chat_list_cache_v0191', {})
         if cloud_owner and current.get('turns'):
-            fingerprint = transcript_fingerprint(current)
             cache_key = 'chat_last_saved_v0187_' + scope + '_' + active_archive['active']
-            if st.session_state.get(cache_key) != fingerprint:
+            revision = conversation_revision(current)
+            if st.session_state.get(cache_key) != revision:
                 try:
                     save_conversation(cloud_owner, active_archive['active'], current)
-                    st.session_state[cache_key] = fingerprint
+                    st.session_state[cache_key] = revision
+                    invalidate_cloud_list(cloud_list_cache, cloud_owner)
                     st.session_state.pop('chat_cloud_error_v0187_' + scope, None)
                 except Exception:
                     st.session_state['chat_cloud_error_v0187_' + scope] = True
+        cloud_list_started_v0191 = time.perf_counter()
         if cloud_owner:
             try:
-                cloud_rows = list_conversations(cloud_owner, limit=100)
+                cloud_rows = cloud_list(cloud_list_cache, cloud_owner,
+                    lambda owner: list_conversations(owner, limit=100))
             except Exception:
                 st.session_state['chat_cloud_error_v0187_' + scope] = True
+        st.session_state.setdefault('recent_stage_times_v0191', {})['list'] = round(
+            time.perf_counter() - cloud_list_started_v0191, 3)
         if cloud_owner and st.session_state.get('chat_cloud_error_v0187_' + scope):
             st.caption('대화 동기화가 일시적으로 지연되고 있어요. 현재 대화는 화면에 남아 있어요.')
-        if st.button('＋ 새 대화', type='primary', width='stretch', key='chat_new_v0187'):
+        # Widget callbacks run before this script. Resolve the requested ID only
+        # after this run has verified the platform account and scoped cloud rows.
+        requested = st.session_state.pop('chat_requested_v0191', None)
+        allowed_ids = {r['id'] for r in visible_conversations(active_archive, cloud_rows, limit=100)}
+        if isinstance(requested, str) and requested in allowed_ids and requested != active_archive['active']:
+            if current.get('pending'):
+                current['pending'] = None
+            if requested not in active_archive['items'] and cloud_owner:
+                loading_started_v0191 = time.perf_counter()
+                try:
+                    row_data = load_conversation(cloud_owner, requested)
+                except Exception:
+                    row_data = None
+                st.session_state.setdefault('recent_stage_times_v0191', {})['load'] = round(
+                    time.perf_counter() - loading_started_v0191, 3)
+                if row_data:
+                    active_archive['items'][requested] = row_data
+                    st.session_state['chat_last_saved_v0187_' + scope + '_' + requested] = conversation_revision(row_data)
+                    matched = next((r for r in cloud_rows if r['id'] == requested), None)
+                    active_archive.setdefault('created', {})[requested] = str((matched or {}).get('updated_at') or '')
+                else:
+                    st.warning('저장된 대화를 불러오지 못했어요.')
+            if requested in active_archive['items']:
+                current = open_conversation(active_archive, requested)
+                st.session_state['chat_sessions_v06'][scope] = current
+                st.session_state.pop('pending_zip_v0189', None)
+        if st.session_state.pop('chat_new_requested_v0191', False):
             if current.get('pending'):
                 current['pending'] = None
                 plan_for_switch = current['context'].get('workflow')
@@ -994,8 +1060,10 @@ with st.sidebar:
                             step['note'] = '대화 전환으로 승인 카드 종료 · 플랫폼 상태를 다시 확인하세요'
                     plan_for_switch['status'] = 'PARTIAL'
             st.session_state.pop('pending_zip_v0189', None)
-            start_conversation(active_archive)
-            st.rerun()
+            current = start_conversation(active_archive)
+            st.session_state['chat_sessions_v06'][scope] = current
+        st.button('＋ 새 대화', type='primary', width='stretch', key='chat_new_v0187',
+                  on_click=_request_new_conversation)
         st.markdown('<div class="sidebar-chat-title">최근 대화</div>', unsafe_allow_html=True)
         search_term = st.text_input('대화 검색', placeholder='대화 제목 검색',
                                     key='chat_search_v0188', label_visibility='collapsed')
@@ -1015,29 +1083,13 @@ with st.sidebar:
                     choose_col, menu_col = st.columns([6, 1.3], gap='small', vertical_alignment='center')
                     with choose_col:
                         text = ('●  ' if is_active else '   ') + row['title'][:34]
-                        if st.button(text, key='chat_select_v0187_' + cid,
-                                     disabled=is_active, width='stretch'):
-                            if current.get('pending'):
-                                current['pending'] = None
-                            if cid not in active_archive['items'] and cloud_owner:
-                                try:
-                                    loaded = load_conversation(cloud_owner, cid)
-                                except Exception:
-                                    loaded = None
-                                if not loaded:
-                                    st.warning('저장된 대화를 불러오지 못했어요.')
-                                else:
-                                    active_archive['items'][cid] = loaded
-                                    active_archive.setdefault('created', {})[cid] = row['updated_at']
-                                    st.session_state['archive_restore_notice_v0172'] = True
-                            if cid in active_archive['items']:
-                                open_conversation(active_archive, cid)
-                                st.rerun()
+                        st.button(text, key='chat_select_v0187_' + cid,
+                                  disabled=is_active, width='stretch',
+                                  on_click=_request_conversation_selection, args=(cid,))
                     with menu_col:
-                        if st.button('⋯', key='chat_more_v0187_' + cid, help='대화 관리', width='stretch'):
-                            open_menu = st.session_state.get('chat_actions_open_v0187')
-                            st.session_state['chat_actions_open_v0187'] = None if open_menu == cid else cid
-                            st.rerun()
+                        st.button('⋯', key='chat_more_v0187_' + cid,
+                                  help='대화 관리', width='stretch',
+                                  on_click=_toggle_conversation_menu, args=(cid,))
                     if st.session_state.get('chat_actions_open_v0187') == cid:
                         st.caption('이 대화를 삭제하면 복구할 수 없어요.')
                         confirm_col, cancel_col = st.columns([3, 1.5], gap='small')
@@ -1051,6 +1103,8 @@ with st.sidebar:
                                         removal_ok = False
                                         st.warning('클라우드 대화를 삭제하지 못했어요. 대화를 유지했어요.')
                                 if removal_ok:
+                                    if cloud_owner:
+                                        invalidate_cloud_list(cloud_list_cache, cloud_owner)
                                     if cid in active_archive['items']:
                                         remove_conversation(active_archive, cid)
                                     st.session_state.pop('chat_last_saved_v0187_' + scope + '_' + cid, None)
@@ -1070,27 +1124,30 @@ with st.sidebar:
             st.session_state[permanent_consent_key] = bool(st.session_state.get(old_consent_key, False))
         current['context'].pop('_persist_owner', None)
         if token and st.session_state[permanent_consent_key]:
-            pref_owner = verified_owner(actor)
-            if pref_owner and storage_health()['ready']:
+            # Current login identity is verified this run. Writes still check
+            # owner format and DB availability at the actual operation.
+            pref_owner = login.owner_key if connected and login else None
+            if pref_owner and (storage_kind() == 'postgres' or storage_health()['ready']):
                 current['context']['_persist_owner'] = pref_owner
         with account_panel:
             with st.popover('계정 · 설정 ▾', use_container_width=True):
-                if connected:
-                    st.caption('ProjectAgain 계정으로 연결됨')
-                    if st.button('다른 계정으로 로그인', key='account_switch_v0190', width='stretch'):
+                with st.container(key='compact_account_popover_v0191'):
+                    if connected:
+                        st.caption('ProjectAgain 계정으로 연결됨')
+                        if st.button('다른 계정으로 로그인', key='account_switch_v0190', width='stretch'):
+                            _logout_from_settings(broker_requested=broker_requested, platform_issuer=platform_issuer,
+                                                  auth_settings=auth_settings, token=token)
+                    else:
+                        st.caption('계정 연결 전에는 대화가 이 브라우저에만 남아요.')
+                        st.link_button('ProjectAgain 회원가입', MARKETPLACE_BASE_URL, use_container_width=True)
+                    if st.button('⚙ 설정', key='open_settings_v0189', width='stretch'):
+                        show_settings_dialog(scope, current, active_archive, cloud_owner,
+                                             actor, token, connected, broker_requested,
+                                             platform_issuer, auth_settings, ai_identity)
+                    st.link_button('ProjectAgain 웹사이트', MARKETPLACE_BASE_URL, use_container_width=True)
+                    if connected and st.button('로그아웃', key='account_logout_v0190', width='stretch'):
                         _logout_from_settings(broker_requested=broker_requested, platform_issuer=platform_issuer,
                                               auth_settings=auth_settings, token=token)
-                else:
-                    st.caption('계정 연결 전에는 대화가 이 브라우저에만 남아요.')
-                    st.link_button('ProjectAgain 회원가입', MARKETPLACE_BASE_URL, use_container_width=True)
-                if st.button('⚙ 설정', key='open_settings_v0189', width='stretch'):
-                    show_settings_dialog(scope, current, active_archive, cloud_owner,
-                                         actor, token, connected, broker_requested,
-                                         platform_issuer, auth_settings, ai_identity)
-                st.link_button('ProjectAgain 웹사이트', MARKETPLACE_BASE_URL, use_container_width=True)
-                if connected and st.button('로그아웃', key='account_logout_v0190', width='stretch'):
-                    _logout_from_settings(broker_requested=broker_requested, platform_issuer=platform_issuer,
-                                          auth_settings=auth_settings, token=token)
         uploaded = selected_zip_for_scope(scope, active_archive['active'])
 
 # ── Main: state-aware project workbench (results first; transcript on demand). ──
@@ -1146,9 +1203,20 @@ if not session["turns"]:
 # Existing or freshly generated messages are shown inline, not inside a
 # separate "대화 기록" expander. Results follow the turn that produced them.
 if session['turns']:
+    render_started_v0191 = time.perf_counter()
     with st.container(key='conversation_history_v0174'):
-        for i, turn in enumerate(session['turns']):
+        visible_key = 'chat_visible_turns_v0191_' + scope + '_' + active_archive['active']
+        visible_count = int(st.session_state.get(visible_key, DEFAULT_VISIBLE_TURNS))
+        offset, visible_turns = visible_tail(session['turns'], visible_count)
+        if offset:
+            if st.button('이전 메시지 {}개 더 보기'.format(min(offset, MORE_VISIBLE_TURNS)),
+                         key='chat_older_v0191_' + active_archive['active']):
+                st.session_state[visible_key] = visible_count + MORE_VISIBLE_TURNS
+                st.rerun()
+        for i, turn in enumerate(visible_turns, start=offset):
             show_turn(turn, i)
+    st.session_state.setdefault('recent_stage_times_v0191', {})['render'] = round(
+        time.perf_counter() - render_started_v0191, 3)
 
 if session.get('pending'):
     # Fresh approval card only: load_conversation() never restores pending.
@@ -1280,7 +1348,11 @@ if submitted:
         st.rerun()
     else:
         history = list(session["turns"])
+        was_empty = not history
         add_turn(session, "user", submitted)
+        # Show the user request before network/LLM work begins.
+        with st.chat_message('user', avatar='👤'):
+            st.markdown(submitted)
         context = session["context"]
         try:
             if uploaded is not None:
@@ -1288,15 +1360,28 @@ if submitted:
                     st.error("ZIP 파일은 4MB 이하여야 해요.")
                 else:
                     context["attachment_bytes"] = uploaded.getvalue()
-            with st.status('요청 분석 및 도구 실행 중', expanded=False, state='running') as activity:
-                result = ChatAgent(actor, allow_model=bool(ai_identity)).reply(submitted, history, context)
+            metrics = ProgressMetrics()
+            with st.status('요청을 확인하고 있어요', expanded=True, state='running') as activity:
+                def on_progress(stage, name=None, success=None):
+                    metrics.event(stage, name, success)
+                    if stage == 'tool_start':
+                        label = describe_tool(name)
+                        activity.update(label=label, state='running', expanded=True)
+                        st.write('◌ ' + label)
+                    elif stage == 'tool_done':
+                        label = describe_tool(name).replace('하고 있어요', '했어요')
+                        st.write(('✓ ' if success else '△ ') +
+                                 (label if success else '도구 요청을 완료하지 못했어요'))
+                    elif stage == 'model_start':
+                        activity.update(label='요청 내용을 분석하고 있어요', state='running', expanded=True)
+                result = ChatAgent(actor, allow_model=bool(ai_identity),
+                                   progress=on_progress).reply(submitted, history, context)
                 tool_events = [e for e in result.get('events', []) if isinstance(e, dict)]
                 if tool_events and any(not e.get('success') for e in tool_events):
-                    activity.update(label='일부 도구 응답을 확인할 수 없어요 · 상세 내용 확인 필요', state='error')
-                elif tool_events:
-                    activity.update(label='도구 응답 수신 · 검증 상태는 결과에서 확인', state='complete')
+                    activity.update(label='일부 도구 요청을 완료하지 못했어요', state='error', expanded=False)
                 else:
-                    activity.update(label='답변 생성 단계 종료 · 도구 실행은 없음', state='complete')
+                    activity.update(label='작업 결과를 정리했어요', state='complete', expanded=False)
+            st.session_state['last_performance_v0191'] = metrics.report()
         except Exception:
             result = {"content": "요청을 처리하는 동안 오류가 발생했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.",
                       "events": [], "pending": None, "mode": "runtime_error"}
@@ -1333,6 +1418,25 @@ if submitted:
             add_turn(session, "assistant", result["content"], events=result.get("events", []), mode=result.get("mode"))
             if result.get("pending"):
                 session["pending"] = result["pending"]
-        st.rerun()
+        # Render the response directly; a full-script rerun here caused an
+        # additional platform check, cloud list query and visible flash.
+        with st.chat_message('assistant', avatar='🧭'):
+            st.markdown(result.get('content') or '')
+            for idx, event in enumerate(result.get('events') or []):
+                if isinstance(event, dict):
+                    show_event(event, idx, len(session['turns']))
+        # Preserve a complete, account-scoped snapshot as soon as it is ready;
+        # the user sees the answer even if cloud storage is slow/unavailable.
+        if cloud_owner:
+            try:
+                save_conversation(cloud_owner, active_archive['active'], session)
+                st.session_state['chat_last_saved_v0187_' + scope + '_' + active_archive['active']] = conversation_revision(session)
+                invalidate_cloud_list(cloud_list_cache, cloud_owner)
+            except Exception:
+                st.caption('이번 대화의 클라우드 저장이 지연되고 있어요. 현재 대화는 유지됩니다.')
+        # New approval cards must be created by the existing guarded UI on a
+        # fresh run; nothing here silently submits or approves an offer.
+        if session.get('pending'):
+            st.rerun()
 
 # Trade boundaries remain enforced in pending_ui, tool labels and platform permissions.

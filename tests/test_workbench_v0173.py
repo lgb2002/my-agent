@@ -135,7 +135,7 @@ class WorkbenchProjection(unittest.TestCase):
         src=(ROOT/'app.py').read_text(encoding='utf-8')
         ast.parse(src)
         for token in ("with st.container(key='conversation_history_v0174')",
-                      "for i, turn in enumerate(session['turns']):",'show_search_workspace',
+                      "for i, turn in enumerate(visible_turns, start=offset):",'show_search_workspace',
                       'show_inspection_workspace', 'show_recommendation_snapshot',
                       'pending_ui(session, actor)', 'st.chat_input', 'include_demo=show_demo'):
             self.assertIn(token,src)

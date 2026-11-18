@@ -88,7 +88,7 @@ class VisualSystemV0174Tests(unittest.TestCase):
         ast.parse(src)
         for code in ("mode = layout_mode(workbench['focus'])", 'pa-layout-mode--{}',
                      "evidence_rows(card['dimensions'])", "activity_tone(success)",
-                     "with st.status('요청 분석 및 도구 실행 중'", "with st.container(key='conversation_history_v0174')"):
+                     "with st.status('요청을 확인하고 있어요'", "with st.container(key='conversation_history_v0174')"):
             self.assertIn(code,src)
 
     def test_business_permissions_are_not_modified(self):
