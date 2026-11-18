@@ -106,7 +106,7 @@ class StoredResultSafety(unittest.TestCase):
         self.assertNotEqual(transcript_fingerprint(base),before)
 
     def test_ui_is_main_chronological_chat_and_keeps_safe_approval(self):
-        app=(ROOT/'app.py').read_text(encoding='utf-8')
+        app=(ROOT/'chat_ui.py').read_text(encoding='utf-8')
         css=(ROOT/'assets/style.css').read_text(encoding='utf-8')
         ast.parse(app)
         self.assertIn('for i, turn in enumerate(visible_turns, start=offset):',app)

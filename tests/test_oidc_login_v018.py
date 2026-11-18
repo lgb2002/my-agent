@@ -127,7 +127,7 @@ class OIDCSecurityTest(unittest.TestCase):
         self.assertEqual(sent[0][1],TOKEN)
 
     def test_ui_hides_manual_grant_and_binds_identity(self):
-        app=(ROOT/'app.py').read_text(encoding='utf-8')
+        app=(ROOT/'chat_ui.py').read_text(encoding='utf-8')
         self.assertNotIn('st.text_input(\n            "위임 토큰"', app)
         self.assertIn('ProjectAgain 계정으로 로그인',app)
         self.assertIn('resolve_login(st.user',app)

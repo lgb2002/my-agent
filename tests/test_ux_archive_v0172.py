@@ -99,7 +99,7 @@ class ArchiveSessionTests(unittest.TestCase):
         self.assertEqual(len(self.archive['items']),1)
 
     def test_app_does_not_prepopulate_empty_archive_with_none(self):
-        src=(ROOT/'app.py').read_text(encoding='utf-8')
+        src=(ROOT/'chat_ui.py').read_text(encoding='utf-8')
         self.assertNotIn('archive.setdefault(scope, None)',src)
         self.assertIn('current = init_archive(archive, scope, current)',src)
         self.assertIn('active_archive = archive[scope]',src)
@@ -207,7 +207,7 @@ class UXActionsTests(unittest.TestCase):
         self.assertEqual(friendly_state('UNRECOGNIZED'),'상태 확인 필요')
 
     def test_app_integration_and_revised_welcome(self):
-        src=(ROOT/'app.py').read_text(encoding='utf-8')
+        src=(ROOT/'chat_ui.py').read_text(encoding='utf-8')
         ast.parse(src)
         for name in ('init_archive','start_conversation','open_conversation','remove_conversation',
                      'save_conversation','load_conversation','delete_conversation','st.form(',

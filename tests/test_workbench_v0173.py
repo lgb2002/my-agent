@@ -132,7 +132,7 @@ class WorkbenchProjection(unittest.TestCase):
         self.assertTrue(any('다음 매물' in label for label,_ in focused_actions(r,{},False)))
 
     def test_code_renders_single_primary_surface_and_no_duplicate_history_table(self):
-        src=(ROOT/'app.py').read_text(encoding='utf-8')
+        src=(ROOT/'chat_ui.py').read_text(encoding='utf-8')
         ast.parse(src)
         for token in ("with st.container(key='conversation_history_v0174')",
                       "for i, turn in enumerate(visible_turns, start=offset):",'show_search_workspace',
@@ -144,7 +144,7 @@ class WorkbenchProjection(unittest.TestCase):
         self.assertIn('show_event(event, no, idx, render_detail=True)',src)
 
     def test_controls_use_existing_confirmation_and_authorization(self):
-        app=(ROOT/'app.py').read_text(encoding='utf-8')
+        app=(ROOT/'chat_ui.py').read_text(encoding='utf-8')
         self.assertIn('submit_confirmed_draft(pending)',app)
         self.assertIn("if pending.get('attempted')",app)
         self.assertIn("request_requires_account(submitted)",app)

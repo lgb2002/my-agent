@@ -219,7 +219,7 @@ class BrokerTests(unittest.TestCase):
 
     def test_broker_config_not_legacy_token_fallback(self):
         from pathlib import Path
-        app=(Path(__file__).resolve().parents[1]/'app.py').read_text(encoding='utf-8')
+        app=(Path(__file__).resolve().parents[1]/'chat_ui.py').read_text(encoding='utf-8')
         self.assertIn('broker_requested',app)
         self.assertIn('broker_connect_ui',app)
         self.assertIn('set_broker_access_handler',app)

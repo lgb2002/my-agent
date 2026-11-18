@@ -122,7 +122,7 @@ class BrokerStorageDiagnosticTests(unittest.TestCase):
         self.assertSafe(result)
 
     def test_database_diagnostic_ui_is_hidden_in_public_app(self):
-        app=(Path(__file__).resolve().parents[1]/'app.py').read_text(encoding='utf8')
+        app=(Path(__file__).resolve().parents[1]/'chat_ui.py').read_text(encoding='utf8')
         self.assertNotIn("st.button('DB 연결 진단 실행'", app)
         self.assertNotIn("with st.expander('로그인 저장소 오류 진단'", app)
         self.assertIn("storage_diagnosis_needed = exc.code == 'storage_unavailable'",app)

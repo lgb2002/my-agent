@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class SidebarV0192Test(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.app=(ROOT/'app.py').read_text(encoding='utf8')
+        cls.app=(ROOT/'chat_ui.py').read_text(encoding='utf8')
         cls.css=(ROOT/'assets/style.css').read_text(encoding='utf8')
 
     def test_simple_actions_replace_large_cta(self):

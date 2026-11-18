@@ -38,7 +38,7 @@ class AutoSaveDefaultV0188(unittest.TestCase):
         self.assertFalse(chat_auto_save_enabled(self.alice))
         self.assertEqual(load_conversation(self.alice,cid)['turns'][0]['content'], '기존 보관 대화')
         # New default UI no longer reads old opt-in flag; no migration deletes data.
-        self.assertNotIn('chat_auto_save_enabled(', (ROOT/'app.py').read_text(encoding='utf-8'))
+        self.assertNotIn('chat_auto_save_enabled(', (ROOT/'chat_ui.py').read_text(encoding='utf-8'))
 
     def test_bulk_delete_is_owner_scoped_and_keeps_other_tables(self):
         for owner in (self.alice,self.bob):
@@ -66,7 +66,7 @@ class AutoSaveDefaultV0188(unittest.TestCase):
         self.assertEqual(conversation_group('2026-01-01T06:00:00+00:00',now=now),'이전 대화')
 
     def test_chat_first_uses_real_input_and_hides_storage_switch_and_dev_tools(self):
-        code=(ROOT/'app.py').read_text(encoding='utf-8')
+        code=(ROOT/'chat_ui.py').read_text(encoding='utf-8')
         css=(ROOT/'assets/style.css').read_text(encoding='utf-8')
         self.assertIn("welcome_input = st.chat_input(",code)
         self.assertIn("with st.container(key='welcome_input_v0188')",code)

@@ -129,7 +129,7 @@ class PoolAndUiTest(unittest.TestCase):
         self.assertTrue(pools[0]['kwargs']['sslmode']=='require')
 
     def test_app_keeps_verified_identity_and_avoids_duplicate_reruns(self):
-        src=(ROOT/'app.py').read_text('utf8')
+        src=(ROOT/'chat_ui.py').read_text('utf8')
         ast.parse(src)
         self.assertIn('cloud_list(cloud_list_cache, cloud_owner',src)
         self.assertIn('login.owner_key if connected and login',src)
@@ -147,10 +147,10 @@ class PoolAndUiTest(unittest.TestCase):
         self.assertIn('height:34px !important;max-height:34px',css)
         self.assertIn('@media (max-width:760px)',css)
         self.assertIn('with st.container(key=\'compact_account_popover_v0191\')',
-                      (ROOT/'app.py').read_text('utf8'))
+                      (ROOT/'chat_ui.py').read_text('utf8'))
 
     def test_temporary_metrics_do_not_replace_auth_or_quotas(self):
-        source=(ROOT/'app.py').read_text('utf8')
+        source=(ROOT/'chat_ui.py').read_text('utf8')
         self.assertIn('set_broker_access_handler(ensure_fresh)',source)
         self.assertIn('set_ai_identity(ai_identity)',source)
         self.assertIn('submit_confirmed_draft(pending)',source)

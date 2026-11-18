@@ -78,7 +78,7 @@ class BrokerDiagnosticsV0186(unittest.TestCase):
         self.assertNoSecrets(report)
 
     def test_app_ui_does_not_display_dsn_or_raw_exception(self):
-        app = (Path(__file__).resolve().parents[1] / 'app.py').read_text(encoding='utf8')
+        app = (Path(__file__).resolve().parents[1] / 'chat_ui.py').read_text(encoding='utf8')
         self.assertNotIn("st.caption('TCP 포트 접속 · '+report['tcp_connect'])",app)
         self.assertNotIn("st.caption('드라이버 오류 종류 · '+report['exception_type'])",app)
         self.assertNotIn('st.exception(exc)',app)

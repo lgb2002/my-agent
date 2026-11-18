@@ -1,3 +1,31 @@
+# ProjectAgain Agent v0.19.4 — 기존 app.py 주소 유지 · 단일 로그인 배포 진입점
+
+**Main file path는 계속 `app.py`입니다.** 앱 삭제, 새 앱 생성, Cloud URL 변경, Secrets 재등록은 필요하지 않습니다.
+
+## 변경 내용
+
+- 기존 v0.19.3 `app.py`의 모든 채팅·거래·저장소/UI 코드를 **바이트 그대로** `chat_ui.py`로 이동했습니다.
+- 새로운 `app.py`는 `st.App('chat_ui.py', ...)`를 선언하고, 통합 로그인용 `/pa-agent/auth/start`, `/pa-agent/auth/logout` 및 `BrokerReturnMiddleware`를 등록하는 보안 ASGI 진입점입니다.
+- `unified_entry.py`도 같은 `chat_ui.py`를 대상으로 유지하여 기존에 이 파일로 배포한 환경과 호환됩니다.
+- OAuth Broker, OIDC 기존 인증, 신원 검증, Supabase, API 권한·거래 승인, 디자인과 대화 기록 저장 코드는 변경하지 않았습니다.
+- 기존 UI를 읽어 검사하는 테스트만 실제 소스 경로인 `chat_ui.py`를 보도록 수정했습니다.
+
+## 배포 순서
+
+1. v0.19.4 전체 ZIP을 기존 GitHub `my-agent`에 병합하고 커밋/푸시합니다. `app.py`, `chat_ui.py`, `unified_entry.py` 셋 모두 필요합니다.
+2. Streamlit Cloud **Main file path는 `app.py` 그대로** 두고 앱을 재시작합니다. 기존 URL `https://projectagain.streamlit.app/`과 Secrets는 유지합니다.
+3. Streamlit Secrets의 `AGENT_UNIFIED_LOGIN_ENABLED=false`를 확인해 **기존 OIDC 로그인/대화 조회**가 정상 동작하는지 먼저 검증합니다.
+4. 플랫폼 Production의 v0.37/운영 DB 0014와 `OAUTH_BROKER_UNIFIED_LOGIN_ENABLED=true`가 확인된 경우에만 Streamlit의 `AGENT_UNIFIED_LOGIN_ENABLED=true`로 변경, 앱 재시작 후 통합 로그인 E2E를 검증합니다.
+5. 서로 다른 브라우저 2개와 계정 2개에서 로그인·동의·복귀·API 조회·대화 복원·로그아웃·계정 전환을 점검합니다. 클라우드 ASGI 프록시 쿠키 동작은 실환경에서 검증해야 합니다.
+
+## 안전한 되돌리기
+
+로그인 문제가 발생하면 우선 **Streamlit Secrets의 `AGENT_UNIFIED_LOGIN_ENABLED=false`**로 변경하고 앱을 재시작합니다. 새 ASGI 진입점은 유지하면서 기존 OIDC/Broker 로그인으로 돌아갑니다. 만약 ASGI 서버 자체가 부팅되지 않으면 이전 v0.19.3의 `app.py`와 기존 배포본으로 코드만 롤백합니다. **앱 삭제·신규 배포·DB 초기화·암호화 키 재발급 금지.**
+
+**검증 상태:** 코드 구조·오프라인 회귀 테스트 완료. 실제 Streamlit Cloud에서의 `st.App` 자동 감지와 브라우저 보안 세션 E2E는 미검증.
+
+---
+
 # ProjectAgain Agent v0.19.2 — 간결한 대화 사이드바 · 플랫폼 통합 로그인 설계 요청
 
 **이번 Agent 변경은 디자인 전용**입니다. 사이드바의 큰 `새 대화` 버튼과 상시 검색창을 접고, 위쪽은 아이콘/텍스트 메뉴, 가운데는 최근 대화, 하단은 `내 계정`으로 재구성했습니다. 계정 메뉴는 작은 팝오버로 통합했으며, 기존 대화 선택·검색·삭제·자동 저장과 계정 전환·설정·로그아웃 동작은 보존했습니다.

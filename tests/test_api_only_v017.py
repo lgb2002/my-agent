@@ -99,7 +99,7 @@ class ApiOnlyTests(unittest.TestCase):
         self.assertTrue(metadata_findings(listing)['is_demo'])
 
     def test_ui_keeps_remote_demo_filter_and_no_role_selection(self):
-        source=(ROOT/'app.py').read_text(encoding='utf-8')
+        source=(ROOT/'chat_ui.py').read_text(encoding='utf-8')
         self.assertIn('시연 매물 포함',source)
         self.assertNotIn('체험할 역할',source)
         self.assertNotIn('perform_confirmed_action',source)

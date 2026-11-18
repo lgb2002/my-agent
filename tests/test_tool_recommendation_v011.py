@@ -102,7 +102,7 @@ class MultiAnswerTest(unittest.TestCase):
 
 class ToolAccessUiTest(unittest.TestCase):
     def test_available_tool_directory_not_behind_developer_flag(self):
-        source=(ROOT/'app.py').read_text(encoding='utf8')
+        source=(ROOT/'chat_ui.py').read_text(encoding='utf8')
         tree=ast.parse(source)
         visible=[n for n in ast.walk(tree) if isinstance(n,ast.With) and
                  '사용 가능한 도구' in (ast.get_source_segment(source,n) or '')]
@@ -114,12 +114,12 @@ class ToolAccessUiTest(unittest.TestCase):
 
     def test_tool_badge_escapes_untrusted_text(self):
         from html import escape
-        source=(ROOT/'app.py').read_text(encoding='utf8')
+        source=(ROOT/'chat_ui.py').read_text(encoding='utf8')
         self.assertIn('escape(label)',source)
         self.assertEqual(escape('<b>'), '&lt;b&gt;')
 
     def test_no_server_and_auth_policies_preserved(self):
-        app=(ROOT/'app.py').read_text(encoding='utf8')
+        app=(ROOT/'chat_ui.py').read_text(encoding='utf8')
         tools=(ROOT/'agent/tools.py').read_text(encoding='utf8')
         self.assertIn('submit_confirmed_draft',app)
         self.assertIn('set_request_context(token=token',app)

@@ -1,3 +1,5 @@
+> **v0.19.4 최신 안내:** 기존 Streamlit 앱은 `Main file path = app.py`를 유지합니다. 아래의 v0.19.3 `unified_entry.py`로 바꾸라는 지시는 이전 버전 전용입니다. 현재 배포 가이드: [`KEEP_APP_PY_DEPLOY_V0194.md`](KEEP_APP_PY_DEPLOY_V0194.md).
+
 # ProjectAgain Agent v0.19.3 — Platform v0.37 통합 로그인 어댑터
 
 ## 적용 및 검증 상태

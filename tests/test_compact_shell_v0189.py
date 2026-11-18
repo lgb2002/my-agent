@@ -27,7 +27,7 @@ class CompactShellV0189(unittest.TestCase):
         self.assertIsNone(stored_zip_bytes({'scope':'o','conversation_id':'c','data':b'bad','armed':'True'},'o','c'))
 
     def test_native_modal_secondary_controls_and_account_approval_preserved(self):
-        app=(ROOT/'app.py').read_text(encoding='utf8')
+        app=(ROOT/'chat_ui.py').read_text(encoding='utf8')
         ast.parse(app)
         self.assertIn("@st.dialog('ProjectAgain 설정'",app)
         for text in ('전체 대화 삭제', '시연 매물 포함', '확인한 조건과 작업 계획 저장',
@@ -47,7 +47,7 @@ class CompactShellV0189(unittest.TestCase):
         self.assertIn('request_requires_account(submitted)',app)
 
     def test_compact_welcome_and_sidebar_are_conversational(self):
-        app=(ROOT/'app.py').read_text(encoding='utf8')
+        app=(ROOT/'chat_ui.py').read_text(encoding='utf8')
         css=(ROOT/'assets/style.css').read_text(encoding='utf8')
         self.assertIn("quick_cols = st.columns(4",app)
         self.assertIn("st.chat_input('예: 50만원 이하 Python 프로젝트를 추천해줘'",app)
@@ -61,7 +61,7 @@ class CompactShellV0189(unittest.TestCase):
         self.assertIn('prefers-reduced-motion',css)
 
     def test_persist_consent_not_lost_when_dialog_closes(self):
-        app=(ROOT/'app.py').read_text(encoding='utf8')
+        app=(ROOT/'chat_ui.py').read_text(encoding='utf8')
         self.assertIn('remember_workflow_setting_v0189_',app)
         self.assertIn("current['context']['_persist_owner'] = pref_owner",app)
         self.assertIn("permanent_consent_key not in st.session_state",app)

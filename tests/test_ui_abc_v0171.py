@@ -83,7 +83,7 @@ class WorkspacePresentationTests(unittest.TestCase):
         self.assertEqual(x['cards'][0]['score'],85)
 
     def test_no_nested_scroll_and_expander_first_step(self):
-        src=(ROOT/'app.py').read_text(encoding='utf-8')
+        src=(ROOT/'chat_ui.py').read_text(encoding='utf-8')
         ast.parse(src)
         self.assertNotIn('st.container(height=540',src)
         self.assertIn("with st.expander('작업 단계 및 상세 확인', expanded=False):",src)
@@ -92,7 +92,7 @@ class WorkspacePresentationTests(unittest.TestCase):
         self.assertIn('pending_ui(session, actor)',src)
 
     def test_tool_and_confirmation_safety_still_present(self):
-        src=(ROOT/'app.py').read_text(encoding='utf-8')
+        src=(ROOT/'chat_ui.py').read_text(encoding='utf-8')
         for text in ('submit_confirmed_draft', 'check_action_status',
                      'set_ai_identity(ai_identity)', 'include_demo=show_demo',
                      '검토', 'st.chat_input'):

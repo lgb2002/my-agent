@@ -84,7 +84,7 @@ class VisualSystemV0174Tests(unittest.TestCase):
         self.assertNotIn('.st-key-conversation_history_v0174 {overflow-y:auto', css)
 
     def test_real_app_uses_layout_state_and_evidence_rows(self):
-        src = (ROOT/'app.py').read_text(encoding='utf-8')
+        src = (ROOT/'chat_ui.py').read_text(encoding='utf-8')
         ast.parse(src)
         for code in ("mode = layout_mode(workbench['focus'])", 'pa-layout-mode--{}',
                      "evidence_rows(card['dimensions'])", "activity_tone(success)",
@@ -92,7 +92,7 @@ class VisualSystemV0174Tests(unittest.TestCase):
             self.assertIn(code,src)
 
     def test_business_permissions_are_not_modified(self):
-        src = (ROOT/'app.py').read_text(encoding='utf-8')
+        src = (ROOT/'chat_ui.py').read_text(encoding='utf-8')
         for code in ('submit_confirmed_draft(pending)', 'request_requires_account(submitted)',
                      'include_demo=show_demo', 'set_ai_identity(ai_identity)',
                      "st.session_state['queued_tool_prompt_v015']", 'st.chat_input('):

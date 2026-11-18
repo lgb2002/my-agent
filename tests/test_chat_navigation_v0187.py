@@ -106,7 +106,7 @@ class NavigationV0187(unittest.TestCase):
         self.assertNotEqual(fingerprint,transcript_fingerprint(session))
 
     def test_ui_hides_diagnostics_and_reduces_duplicate_menus(self):
-        app=(ROOT/'app.py').read_text('utf-8')
+        app=(ROOT/'chat_ui.py').read_text('utf-8')
         css=(ROOT/'assets/style.css').read_text('utf-8')
         self.assertNotIn("with st.expander('대화 보관함",app)
         self.assertNotIn("with st.expander('대화 장기 보관",app)

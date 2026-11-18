@@ -1,12 +1,12 @@
 {
-  "timestamp_utc": "2026-11-18T05:47:27.833743+00:00",
-  "python": "3.13.5",
-  "os": "Linux-6.18.57-x86_64-with-glibc2.41",
-  "test_count": 299,
-  "passed": 299,
+  "version": "0.19.4",
+  "test_count": 325,
+  "passed": 325,
   "failed": 0,
   "errors": 0,
   "skipped": 0,
-  "scope": "동일 Python 프로세스 내부 기능 검증. Streamlit UI 실기동/Windows Python3.12/실Replit/OpenAI API 호출은 미검증",
-  "failures": []
+  "python": "3.13.5",
+  "validation": "Offline unittest discover in this container and AST parse of all Python sources.",
+  "cloud_e2e": "NOT TESTED: Streamlit Cloud runtime, app entry discovery, cookie callback & Replit v0.37 live endpoints",
+  "data_preservation": "Original v0.19.3 data/ and pyc snapshots preserved byte-for-byte; original chat app.py copied byte-for-byte to chat_ui.py"
 }

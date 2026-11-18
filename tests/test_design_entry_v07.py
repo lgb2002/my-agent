@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class EntryDesignTests(unittest.TestCase):
     def test_four_action_prompts_match_existing_tool_intents(self):
         from agent.chat import offline_intent
-        root = ast.parse((ROOT / 'app.py').read_text(encoding='utf-8'))
+        root = ast.parse((ROOT / 'chat_ui.py').read_text(encoding='utf-8'))
         examples = None
         for node in ast.walk(root):
             if isinstance(node, ast.Assign) and any(
@@ -28,7 +28,7 @@ class EntryDesignTests(unittest.TestCase):
         self.assertNotEqual(examples[0][1], examples[2][1])
 
     def test_ui_chrome_keeps_native_streamlit_controls(self):
-        source = (ROOT / 'app.py').read_text(encoding='utf-8')
+        source = (ROOT / 'chat_ui.py').read_text(encoding='utf-8')
         self.assertIn("with st.container(key='welcome_actions'):", source)
         self.assertIn('quick_cols = st.columns(4', source)  # compact row, mobile CSS wraps to 2 columns
         self.assertIn('st.chat_input(', source)

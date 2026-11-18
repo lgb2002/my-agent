@@ -35,7 +35,7 @@ class ChatWorkspaceV010Tests(unittest.TestCase):
         self.assertNotIn(old,store)
 
     def test_ui_default_demo_and_scrollable_native_chat(self):
-        source=(ROOT/'app.py').read_text(encoding='utf-8')
+        source=(ROOT/'chat_ui.py').read_text(encoding='utf-8')
         self.assertIn("st.checkbox('시연 매물 포함'", source)
         self.assertIn('include_demo_setting_v0189', source)
         self.assertIn('set_request_context(token=token, visitor_id=visitor, include_demo=show_demo)',source)
@@ -50,7 +50,7 @@ class ChatWorkspaceV010Tests(unittest.TestCase):
     def test_developer_diagnostics_removed_from_main_sidebar(self):
         config=(ROOT/'core/config.py').read_text(encoding='utf-8')
         self.assertIn("os.environ.get('SHOW_DEVELOPER_TOOLS', 'false')",config)
-        source=(ROOT/'app.py').read_text(encoding='utf-8')
+        source=(ROOT/'chat_ui.py').read_text(encoding='utf-8')
         for label in ('API 연결 진단', '로그인 저장소 오류 진단', 'DB 연결 진단 실행'):
             self.assertNotIn(label,source)
         self.assertIn('사용 가능한 도구 · {}개',source)
