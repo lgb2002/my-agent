@@ -1,3 +1,11 @@
+## v0.18.5 — 로그인 저장소 읽기 전용 진단 (2026-11-18)
+
+- `core/broker_storage_diagnostics.py`: OAuth Broker PostgreSQL 오류를 비밀정보를 노출하지 않는 오류 유형/SQLSTATE/읽기 전용 확인 단계로 분류. DB 접속, `SELECT 1`, `public` 스키마 CREATE 권한 여부만 검사하고 DB 내용은 변경하지 않음.
+- `app.py`: OIDC 로그인된 사용자의 Broker 저장소 연결이 실패한 경우에만 **로그인 저장소 오류 진단** 접힘 메뉴 표시. 명시적인 버튼 클릭 후 검사하며 30초 중복 실행 제한. 환경변수와 Secrets 값의 차이는 Boolean만 표시.
+- DB 불가 상태에서 Broker 연결 준비를 중복 시도하지 않도록 조정. 기존 로그인·Broker·API·거래 승인 로직 및 디자인 원칙 유지.
+- 민감값·원본 예외 노출 방지 및 실패 분류, URL 검사, 읽기 전용 검사 회귀 테스트 11개 추가. 총 254개 오프라인 테스트 통과.
+- 실제 Streamlit Cloud, Supabase, Replit Platform 연결은 배포 후 사용자 검증 필요.
+
 ## v0.18.4 — Streamlit 첫 접속 대화 보관함 초기화 수정 (2026-11-17)
 
 - `app.py`: `archive.setdefault(scope, None)`로 미리 빈 보관함 값을 생성하던 오류 제거. 모든 진입에서 `init_archive`가 초기화·기존 대화 선택을 담당하게 변경.

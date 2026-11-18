@@ -1,3 +1,11 @@
+# ProjectAgain Agent v0.18.5 — 로그인 저장소 연결 진단
+
+> OAuth 로그인 후 **로그인 저장소 연결에 실패했어요**가 표시되면 왼쪽의 **로그인 저장소 오류 진단 → DB 연결 진단 실행**을 선택하세요. DB 주소·비밀번호·호스트·원본 예외를 출력하지 않고, 접속 오류 유형·SQLSTATE(있을 경우)·조치 안내만 표시합니다. DB에는 읽기 쿼리만 실행합니다. 자세한 내용: [`docs/BROKER_STORAGE_DIAGNOSTICS_V0185.md`](docs/BROKER_STORAGE_DIAGNOSTICS_V0185.md).
+>
+> 기존 v0.18.4의 설정, 9개 도구, API 권한, OAuth Broker 자동 갱신, DESIGN.md, 사용자별 저장소, 승인 정책을 보존합니다. 신규 패키지 설치·Secret 재생성은 필요하지 않습니다. 전체 ZIP 배포 시 `.env`, `.venv`, `data/` 및 사용자 정의 패키지 항목을 유지하세요. 실제 외부 DB 연결 검증은 배포 환경에서 진행해야 합니다.
+
+---
+
 # ProjectAgain Agent v0.18.4 — Streamlit 대화 보관함 첫 실행 수정
 
 > **v0.18.4 배포 수정:** Streamlit Cloud 최초 방문에서 대화 보관함이 `None`으로 초기화되어 앱이 중단되던 오류를 수정했습니다. 추가 명령이나 Secrets 변경 없이 전체 프로젝트를 GitHub에 반영하면 됩니다. 기존 계정 저장소/사용자 설정은 유지하세요.

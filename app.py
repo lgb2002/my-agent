@@ -32,6 +32,7 @@ from core.request_context import (set_request_context, set_broker_refresh_handle
 from core.oidc_session import resolve_login, revoke_access, _fetch_identity  # noqa: E402
 from core.oauth_broker import (BrokerStore,BrokerClient,BrokerError,BrokerReauth,
     _browser_identity,new_intent,resolve_broker,BROKER_SCOPE)  # noqa: E402
+from core.broker_storage_diagnostics import diagnose_broker_storage  # noqa: E402
 from core.marketplace_client import origin_only  # noqa: E402
 from core.ai_usage import set_ai_identity, usage_snapshot, storage_kind as ai_usage_storage_kind  # noqa: E402
 from core.llm_service import contains_obvious_secret  # noqa: E402
@@ -511,6 +512,7 @@ def broker_connect_ui(platform_origin, native_configured):
         else:
             st.warning('인증 복귀 정보가 올바르지 않아요. 다시 연결해 주세요.')
 
+    storage_diagnosis_needed = False
     try:
         login,record=resolve_broker(store,client,binding,uid,platform_origin)
     except BrokerReauth:
@@ -522,6 +524,7 @@ def broker_connect_ui(platform_origin, native_configured):
         # from the Streamlit side or silently fall back to a legacy token.
         login,record=None,None
         st.warning(str(exc))
+        storage_diagnosis_needed = exc.code == 'storage_unavailable'
     if login and login.connected:
         st.caption('계정 연결됨 · 인증 정보 자동 갱신')
         def ensure_fresh():
@@ -568,18 +571,45 @@ def broker_connect_ui(platform_origin, native_configured):
         return login,refresh_one_get
 
     st.caption('ProjectAgain 계정 확인됨 · API 이용 권한을 연결해 주세요.')
-    try:
-        auth_url=st.session_state.get('broker_authorization_url')
-        if (not auth_url or st.session_state.get('broker_authorization_binding')!=binding
-                or time.time()-float(st.session_state.get('broker_authorization_created',0))>240):
-            auth_url=new_intent(store,client,binding,uid)
-            st.session_state['broker_authorization_url']=auth_url
-            st.session_state['broker_authorization_binding']=binding
-            st.session_state['broker_authorization_created']=time.time()
-        st.link_button('ProjectAgain 작업 권한 연결',auth_url,type='primary',width='stretch')
-        st.caption('첫 연결 시 플랫폼에서 권한 동의가 필요해요.')
-    except BrokerError:
-        st.warning('권한 연결을 준비하지 못했어요. 연결 설정과 플랫폼 상태를 확인해 주세요.')
+    # Avoid a second failing DB connection on every rerun when the store is down.
+    if not storage_diagnosis_needed:
+        try:
+            auth_url=st.session_state.get('broker_authorization_url')
+            if (not auth_url or st.session_state.get('broker_authorization_binding')!=binding
+                    or time.time()-float(st.session_state.get('broker_authorization_created',0))>240):
+                auth_url=new_intent(store,client,binding,uid)
+                st.session_state['broker_authorization_url']=auth_url
+                st.session_state['broker_authorization_binding']=binding
+                st.session_state['broker_authorization_created']=time.time()
+            st.link_button('ProjectAgain 작업 권한 연결',auth_url,type='primary',width='stretch')
+            st.caption('첫 연결 시 플랫폼에서 권한 동의가 필요해요.')
+        except BrokerError as exc:
+            st.warning('권한 연결을 준비하지 못했어요. 연결 설정과 플랫폼 상태를 확인해 주세요.')
+            storage_diagnosis_needed = exc.code == 'storage_unavailable'
+    if storage_diagnosis_needed:
+        with st.expander('로그인 저장소 오류 진단', expanded=False):
+            st.caption('진단을 실행하면 DB에 읽기 전용 쿼리를 보냅니다. 연결 주소·계정·비밀번호·원본 예외는 표시하거나 기록하지 않습니다.')
+            if st.button('DB 연결 진단 실행', key='broker_storage_diagnose_v0185', width='stretch'):
+                now=time.monotonic()
+                last=float(st.session_state.get('broker_storage_diagnose_at_v0185',-99999))
+                if now-last<30:
+                    st.info('연결 진단은 30초 후 다시 실행할 수 있어요.')
+                else:
+                    st.session_state['broker_storage_diagnose_at_v0185']=now
+                    try:
+                        secret_url=st.secrets.get('AGENT_STATE_DATABASE_URL',None)
+                    except (KeyError,AttributeError,TypeError):
+                        secret_url=None
+                    report=diagnose_broker_storage(db_url, secret_url=secret_url)
+                    st.markdown('**진단 결과 · {}**'.format(report['status']))
+                    st.caption('확인 단계 · {} / 분류 · {}'.format(report['stage'],report['category']))
+                    if report['sqlstate']:
+                        st.caption('PostgreSQL SQLSTATE · '+report['sqlstate'])
+                    if report['environment_override_differs']:
+                        st.warning('실행 환경변수와 Streamlit Secrets의 DB 주소가 다릅니다. 실행 환경변수가 우선 적용되고 있어요.')
+                    if report['schema_create'] is False:
+                        st.warning('테이블 생성 권한이 확인되지 않았어요.')
+                    st.info(report['advice'])
     if st.button('다른 계정으로 로그인',key='broker_switch_account',width='stretch'):
         st.logout()
     return None,None
