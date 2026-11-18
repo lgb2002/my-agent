@@ -1,3 +1,9 @@
+## v0.18.6 — DB 접속 실패 세분화 진단 (2026-11-18)
+
+- v0.18.5에서 원인이 `기타 데이터베이스 연결 오류`로 남은 사례에 대응. libpq URI 해석 확인, 오류 종류 허용목록, 비밀정보 없는 DNS/TCP Supabase 연결 검사를 추가.
+- PostgreSQL/암호/TLS/OIDC/Broker 동작과 설정값은 유지, 검사만 명시적 버튼 실행 시 진행. 외부 비밀정보와 원본 예외는 출력하지 않음.
+- 회귀 테스트 8개 추가. 실 Supabase 연결은 배포 환경에서 확인 필요.
+
 ## v0.18.5 — 로그인 저장소 읽기 전용 진단 (2026-11-18)
 
 - `core/broker_storage_diagnostics.py`: OAuth Broker PostgreSQL 오류를 비밀정보를 노출하지 않는 오류 유형/SQLSTATE/읽기 전용 확인 단계로 분류. DB 접속, `SELECT 1`, `public` 스키마 CREATE 권한 여부만 검사하고 DB 내용은 변경하지 않음.

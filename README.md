@@ -1,3 +1,5 @@
+> **v0.18.6 DB 진단 확장:** 연결 오류가 `기타 데이터베이스 연결 오류`로 분류되면, DNS·TCP 포트·libpq URI 해석·안전한 드라이버 오류 종류를 단계별로 추가 확인합니다. [진단 가이드](docs/BROKER_STORAGE_DIAGNOSTICS_V0186.md).
+
 # ProjectAgain Agent v0.18.5 — 로그인 저장소 연결 진단
 
 > OAuth 로그인 후 **로그인 저장소 연결에 실패했어요**가 표시되면 왼쪽의 **로그인 저장소 오류 진단 → DB 연결 진단 실행**을 선택하세요. DB 주소·비밀번호·호스트·원본 예외를 출력하지 않고, 접속 오류 유형·SQLSTATE(있을 경우)·조치 안내만 표시합니다. DB에는 읽기 쿼리만 실행합니다. 자세한 내용: [`docs/BROKER_STORAGE_DIAGNOSTICS_V0185.md`](docs/BROKER_STORAGE_DIAGNOSTICS_V0185.md).

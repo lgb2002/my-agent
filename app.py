@@ -605,6 +605,14 @@ def broker_connect_ui(platform_origin, native_configured):
                     st.caption('확인 단계 · {} / 분류 · {}'.format(report['stage'],report['category']))
                     if report['sqlstate']:
                         st.caption('PostgreSQL SQLSTATE · '+report['sqlstate'])
+                    if report.get('exception_type'):
+                        st.caption('드라이버 오류 종류 · '+report['exception_type'])
+                    if report.get('uri_libpq') != '미검사':
+                        st.caption('PostgreSQL 연결 문자열 해석 · '+report['uri_libpq'])
+                    if report.get('dns_lookup') != '미검사':
+                        st.caption('DNS 조회 · '+report['dns_lookup'])
+                    if report.get('tcp_connect') != '미검사':
+                        st.caption('TCP 포트 접속 · '+report['tcp_connect'])
                     if report['environment_override_differs']:
                         st.warning('실행 환경변수와 Streamlit Secrets의 DB 주소가 다릅니다. 실행 환경변수가 우선 적용되고 있어요.')
                     if report['schema_create'] is False:
