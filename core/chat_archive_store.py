@@ -11,6 +11,7 @@ import uuid
 from core.llm_service import contains_obvious_secret
 from core.workflow_store import _db_connection, _sql, _guard_owner, _LOCK
 from core.chat_sessions import new_session, conversation_title
+from core.chat_history_snapshot import capture_event, historic_listing_references
 
 _CREATE = '''CREATE TABLE IF NOT EXISTS agent_saved_conversations (
  owner_key TEXT NOT NULL, conversation_id TEXT NOT NULL, title TEXT NOT NULL,
@@ -29,32 +30,34 @@ def _conversation_id(ident):
 
 
 def _sanitize(session):
+    """Versioned, owner-scoped transcript and safe historic evidence.
+
+    v1 transcripts remain readable without migration. A snapshot is NOT
+    execution context: it cannot restore pending approval, tool authorization,
+    private API payloads, ZIP files or live transaction state.
+    """
     turns = session.get('turns', [])
     if not isinstance(turns, list):
         raise ValueError('대화 형식이 올바르지 않습니다.')
     saved = []
     for entry in turns:
-        role = entry.get('role')
-        if role not in ('user', 'assistant'):
+        if not isinstance(entry, dict) or entry.get('role') not in ('user','assistant'):
             continue
         content = str(entry.get('content') or '')[:6000]
         if contains_obvious_secret(content):
             raise ValueError('비밀정보로 보이는 문장이 있어 대화를 보관하지 않았습니다.')
-        # Preserve tool labels/status, not raw response data or listing details.
+        stamp = entry.get('created_at')
         events = []
         for ev in (entry.get('events') or [])[:8]:
-            if not isinstance(ev, dict):
-                continue
-            name = str(ev.get('name') or '')[:45]
-            label = str(ev.get('label') or '')[:65]
-            summary = str(ev.get('summary') or '')[:200]
-            if any(contains_obvious_secret(x) for x in (name, label, summary)):
-                raise ValueError('도구 응답에 비밀정보가 있어 대화를 보관하지 않았습니다.')
-            events.append({'name': name, 'label':label, 'summary':summary,
-                           'success':ev.get('success') is True})
-        saved.append({'role': role, 'content': content, 'events': events})
-    raw = json.dumps({'version':1, 'turns': saved}, ensure_ascii=False)
-    if len(raw.encode('utf-8')) > 750_000:
+            safe_event = capture_event(ev, captured_at=stamp)
+            if safe_event:
+                events.append(safe_event)
+        turn = {'role':entry['role'],'content':content,'events':events}
+        if isinstance(stamp,str) and len(stamp)<60:
+            turn['created_at']=stamp
+        saved.append(turn)
+    raw = json.dumps({'version':2,'turns':saved}, ensure_ascii=False, separators=(',',':'))
+    if len(raw.encode('utf-8')) > 8_000_000:
         raise ValueError('대화 보관 용량을 초과했습니다. 현재 대화를 내려받아 보관해 주세요.')
     return raw
 
@@ -95,6 +98,9 @@ def load_conversation(owner, ident):
     safe = json.loads(row[0])
     session = new_session()
     session['turns'] = safe.get('turns') or []
+    session['context']['recent_listings'] = historic_listing_references(session['turns'])
+    session['context']['_listing_snapshot_stale'] = bool(session['context']['recent_listings'])
+    session['_historical_restore'] = True
     # Deliberately never restore authorization, tool argument caches, approval
     # cards or stale execution state from an exported transcript.
     return session

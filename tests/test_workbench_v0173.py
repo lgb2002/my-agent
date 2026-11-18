@@ -134,13 +134,14 @@ class WorkbenchProjection(unittest.TestCase):
     def test_code_renders_single_primary_surface_and_no_duplicate_history_table(self):
         src=(ROOT/'app.py').read_text(encoding='utf-8')
         ast.parse(src)
-        for token in ('render_primary_workspace(workbench, session, actor)',
-                      "with st.expander('대화 기록 · {}개 메시지",'show_search_workspace',
+        for token in ("with st.container(key='conversation_history_v0174')",
+                      "for i, turn in enumerate(session['turns']):",'show_search_workspace',
                       'show_inspection_workspace', 'show_recommendation_snapshot',
                       'pending_ui(session, actor)', 'st.chat_input', 'include_demo=show_demo'):
             self.assertIn(token,src)
         self.assertNotIn('st.container(height=540',src)
-        self.assertIn('show_event(event, no, idx, render_detail=False)',src)
+        self.assertNotIn("with st.expander('대화 기록 ·",src)
+        self.assertIn('show_event(event, no, idx, render_detail=True)',src)
 
     def test_controls_use_existing_confirmation_and_authorization(self):
         app=(ROOT/'app.py').read_text(encoding='utf-8')

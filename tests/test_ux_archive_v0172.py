@@ -161,9 +161,14 @@ class StoredArchiveTests(unittest.TestCase):
                 {'turns':[{'role':'user','content':'my key sk-'+'a'*44}]})
 
     def test_large_conversation_rejected_without_silent_truncation(self):
+        # Long normal threads must not silently lose earlier messages.
+        normal = {'turns':[{'role':'assistant','content':'가'*6000} for i in range(120)]}
+        save_conversation(self.alice,self.cid, normal)
+        self.assertEqual(len(load_conversation(self.alice,self.cid)['turns']),120)
+        # Bound abusive storage; refuse oversized writes rather than cropping.
         with self.assertRaises(ValueError):
             save_conversation(self.alice,self.cid,
-                {'turns':[{'role':'assistant','content':'가'*6000} for i in range(120)]})
+                {'turns':[{'role':'assistant','content':'가'*6000} for i in range(1600)]})
 
 
 class UXActionsTests(unittest.TestCase):

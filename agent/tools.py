@@ -212,6 +212,7 @@ class ToolDispatcher:
                          "category": x.get("category") or "", "tech_stack": x.get("tech_stack") or [],
                          "verification_status": x.get("verification_status", "UNKNOWN"),
                          "description": str(x.get("description") or "")[:240]} for x in items]}
+                data["query"] = q
                 data["next_cursor"] = page.get("next_cursor")
                 data["total_estimate"] = page.get("total_estimate")
                 summary = "매물 {}건을 표시했어요.{}".format(len(items), " 다음 페이지가 있어요." if page.get("next_cursor") else "")
@@ -284,7 +285,7 @@ class ToolDispatcher:
                 job = self.request("POST", "/api/agent/v1/jobs", {"task_type": "INSPECT_METADATA", "listing_id": listing["id"]}, write=True)
                 full = self.request("GET", "/api/agent/v1/jobs/" + job["job_id"])
                 self.context["last_job_id"] = job["job_id"]
-                data = {"listing_title": listing["title"], "job_id": job["job_id"], "report": full.get("result"), "status": full["status"]}
+                data = {"listing_id": listing["id"], "listing_title": listing["title"], "job_id": job["job_id"], "report": full.get("result"), "status": full["status"]}
                 summary = "{}의 공개 자료를 점검했어요. 실행 검증·권리 검증은 미완료예요.".format(listing["title"])
             elif name == "inspect_attached_zip":
                 raw = self.context.get("attachment_bytes")

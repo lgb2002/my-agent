@@ -87,7 +87,7 @@ class WorkspacePresentationTests(unittest.TestCase):
         ast.parse(src)
         self.assertNotIn('st.container(height=540',src)
         self.assertIn("with st.expander('작업 단계 및 상세 확인', expanded=False):",src)
-        self.assertIn("show_recommendation_snapshot(event.get('data') or {}, idx, turn_id)",src)
+        self.assertIn("show_recommendation_snapshot(data, idx, turn_id)",src)
         self.assertIn("st.table(view['comparison'])",src)
         self.assertIn('pending_ui(session, actor)',src)
 

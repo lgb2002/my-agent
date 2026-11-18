@@ -387,74 +387,6 @@ html,body,[data-testid="stApp"] {
   .st-key-welcome_actions [class*="st-key-welcome_tile_"] {transition:none;}
 }
 
-/* v0.18.8 — chat-first welcome and conversation-first sidebar */
-[data-testid="stSidebar"] .st-key-sidebar_chat_panel_v0188 {
-  min-width:0;
-}
-[data-testid="stSidebar"] .st-key-sidebar_account_panel_v0188 {
-  margin-top:22px;padding-top:17px;border-top:1px solid var(--line-strong);
-}
-[data-testid="stSidebar"] .st-key-sidebar_account_panel_v0188 .sidebar-heading {
-  font-size:.81rem;color:var(--muted);font-weight:710;
-}
-[data-testid="stSidebar"] .st-key-sidebar_chat_panel_v0188 .sidebar-chat-title {
-  font-size:.78rem;text-transform:uppercase;letter-spacing:.09em;
-  margin:0 0 8px;color:var(--muted);
-}
-[data-testid="stSidebar"] .st-key-sidebar_chat_panel_v0188 .sidebar-chat-section {
-  font-size:.73rem;letter-spacing:0;font-weight:730;margin:12px 0 5px;
-}
-[data-testid="stSidebar"] .st-key-sidebar_chat_panel_v0188 [data-testid="stTextInput"] input {
-  border:1px solid var(--line-strong);background:#fff;border-radius:10px;
-  padding:8px 12px;min-height:40px;font-size:.86rem;
-}
-[data-testid="stSidebar"] .st-key-sidebar_chat_panel_v0188 [data-testid="stTextInput"] input:focus {
-  border-color:var(--focus);box-shadow:var(--shadow-focus);
-}
-[data-testid="stSidebar"] [class*="st-key-chat_nav_row_v0187_"] .stButton button {
-  min-height:38px;border-radius:7px;
-}
-/* First-run focal region: a question, native input, and compact helpers. */
-.welcome {
-  margin:25px 0 0;padding:28px clamp(22px,3.5vw,37px) 9px;
-  background:var(--paper);border:1px solid var(--line-strong);
-  border-bottom:0;border-radius:18px 18px 0 0;box-shadow:none;
-}
-.welcome-eyebrow {margin-bottom:13px;font-size:.72rem;letter-spacing:.1em;}
-.welcome-title {font-size:clamp(1.9rem,3vw,2.3rem);line-height:1.27;max-width:620px;}
-.welcome-description {font-size:.94rem;margin:12px 0 9px;max-width:650px;line-height:1.58;}
-.st-key-welcome_input_v0188 {
-  margin-top:-.82rem;padding:12px clamp(20px,3.5vw,34px) 21px;
-  background:var(--paper);border:1px solid var(--line-strong);
-  border-top:0;border-radius:0 0 18px 18px;
-  box-shadow:0 8px 25px rgba(19,48,31,.035);
-}
-.st-key-welcome_input_v0188 [data-testid="stChatInput"] {
-  max-width:none;margin:0;border:1px solid #A8BEAC;
-  border-radius:12px;box-shadow:0 1px 4px rgba(23,55,35,.04);
-}
-.st-key-welcome_input_v0188 [data-testid="stChatInput"]:focus-within {
-  box-shadow:var(--shadow-focus);border-color:var(--focus);
-}
-.st-key-welcome_actions {margin-top:18px;}
-.st-key-welcome_actions .welcome-actions-heading {margin-bottom:10px;}
-.st-key-welcome_actions .welcome-actions-title {font-size:.82rem;color:var(--muted);}
-.st-key-welcome_actions [class*="st-key-welcome_tile_"] {
-  padding:14px 17px 10px;min-height:112px;
-  border-radius:12px;background:#fff;border:1px solid var(--line);
-}
-.st-key-welcome_actions .stButton>button:not([kind="primary"]) {
-  min-height:36px;font-size:.95rem;padding:0;text-align:left;
-}
-.st-key-welcome_actions .suggestion-hint {font-size:.82rem;line-height:1.5;margin:3px 0 0;}
-@media (max-width:760px) {
-  .welcome {margin:12px 0 0;padding:22px 18px 8px;border-radius:15px 15px 0 0;}
-  .welcome-title {font-size:clamp(1.73rem,6.9vw,2.05rem);}
-  .welcome-description {font-size:.88rem;}
-  .st-key-welcome_input_v0188 {padding:10px 16px 17px;border-radius:0 0 15px 15px;}
-  .st-key-welcome_actions [class*="st-key-welcome_tile_"] {min-height:0;padding:11px 14px 10px;}
-}
-
 /* v0.18.9 — compact conversational entry, purposeful sidebar hierarchy.
    Latest overrides avoid altering result cards, approval controls or evidence. */
 [data-testid="stSidebar"] {background:#F4F7F3;}
@@ -573,3 +505,79 @@ html,body,[data-testid="stApp"] {
 @media (prefers-reduced-motion:reduce) {
   .st-key-welcome_actions [class*="st-key-welcome_tile_"] {transition:none;}
 }
+
+/* v0.19.0 — compact, three-zone sidebar; conversation is the main canvas.
+   Keep size rules here; no new global button overrides. */
+[data-testid="stMainBlockContainer"], section.main > div.block-container {
+  padding-top:3.25rem; /* reserve the Streamlit header: no clipped toolbar */
+}
+.workspace-bar {margin-top:0;min-height:32px;align-items:center;}
+/* The sidebar has fixed top shortcuts and bottom account, and a scrollable middle. */
+[data-testid="stSidebar"] [data-testid="stSidebarContent"] > [data-testid="stVerticalBlock"],
+[data-testid="stSidebar"] [data-testid="stSidebarContent"] > div > [data-testid="stVerticalBlock"] {
+  min-height:calc(100dvh - 32px);display:flex;flex-direction:column;gap:0.35rem;
+}
+[data-testid="stSidebar"] .st-key-sidebar_chat_panel_v0188 {
+  min-height:0;flex:1 1 auto;display:flex;flex-direction:column;overflow:hidden;
+}
+[data-testid="stSidebar"] .st-key-sidebar_chat_panel_v0188 > [data-testid="stVerticalBlock"] {
+  display:flex;min-height:0;flex:1 1 auto;flex-direction:column;gap:.2rem;
+}
+[data-testid="stSidebar"] .st-key-sidebar_recent_v0189 {
+  min-height:64px;flex:1 1 auto;max-height:none;overflow-y:auto;overflow-x:hidden;
+  scrollbar-width:thin;padding:5px 2px 12px 0;margin-top:10px;
+}
+[data-testid="stSidebar"] .st-key-sidebar_account_panel_v0188 {
+  flex:0 0 auto;position:relative;bottom:auto;margin:0;
+  padding:10px 0 5px;border-top:1px solid var(--line);z-index:1;
+}
+[data-testid="stSidebar"] .st-key-sidebar_account_panel_v0188 button {
+  min-height:35px;padding:5px 10px;font-size:.82rem;
+}
+[data-testid="stSidebar"] [class*="st-key-chat_nav_row_v0187_"] {
+  margin:1px 0;min-height:35px;
+}
+[data-testid="stSidebar"] .sidebar-chat-section {
+  margin:16px 0 8px !important;font-size:.7rem;letter-spacing:.01em;
+}
+[data-testid="stSidebar"] .sidebar-chat-title {margin:20px 0 9px !important;}
+[data-testid="stSidebar"] .st-key-sidebar_shortcuts_v0189 {margin:15px 0 10px !important;}
+[data-testid="stSidebar"] .st-key-sidebar_shortcuts_v0189 .stButton button {min-height:33px;}
+[data-testid="stSidebar"] button[kind="primary"] {min-height:35px !important;padding:5px 12px !important;}
+/* Streamlit text input already supplies its own border: don't double outline. */
+[data-testid="stSidebar"] [data-testid="stTextInput"] {box-shadow:none !important;border:0 !important;}
+[data-testid="stSidebar"] [data-testid="stTextInput"] [data-baseweb="input"] {
+  border:1px solid var(--line-strong) !important;box-shadow:none !important;
+  outline:0 !important;border-radius:8px !important;background:var(--paper);
+}
+[data-testid="stSidebar"] [data-testid="stTextInput"] input {
+  min-height:34px !important;border:0 !important;outline:0 !important;
+  box-shadow:none !important;background:transparent !important;
+}
+[data-testid="stSidebar"] [data-testid="stTextInput"]:focus-within [data-baseweb="input"] {
+  border-color:var(--focus) !important;box-shadow:var(--shadow-focus) !important;
+}
+/* Messages and their at-time evidence are visible, never another boxed transcript. */
+.st-key-conversation_history_v0174 {margin-top:14px;}
+.st-key-conversation_history_v0174 [data-testid="stChatMessage"] {
+  border:0;box-shadow:none;background:transparent;margin:10px 0 16px;
+}
+.st-key-conversation_history_v0174 .tool-activity {margin-top:12px;}
+.st-key-conversation_history_v0174 [data-testid="stExpander"] {
+  border-color:var(--line);border-radius:10px;
+}
+.st-key-conversation_history_v0174 [data-testid="stChatMessage"] > div {min-width:0;}
+@media (max-width:760px) {
+  [data-testid="stMainBlockContainer"] {padding-top:2.35rem !important;}
+  [data-testid="stSidebar"] .st-key-sidebar_chat_panel_v0188 {overflow:visible;}
+  [data-testid="stSidebar"] .st-key-sidebar_recent_v0189 {max-height:42dvh;overflow-y:auto;}
+  [data-testid="stSidebar"] .st-key-sidebar_account_panel_v0188 {position:relative;}
+  [data-testid="stSidebar"] button[kind="primary"] {min-height:44px !important;}
+}
+@media (prefers-reduced-motion:reduce) {
+  .st-key-conversation_history_v0174 * {transition:none !important;}
+}
+
+/* v0.19.0 cleanup: redundant sidebar shortcuts were removed in favor of the
+   contextual actions on the welcome screen. */
+[data-testid="stSidebar"] .st-key-sidebar_chat_panel_v0188 .sidebar-chat-title {margin-top:17px !important;}

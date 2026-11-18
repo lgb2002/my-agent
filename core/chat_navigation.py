@@ -9,6 +9,7 @@ import hashlib
 import json
 
 from core.chat_sessions import conversation_list
+from core.chat_history_snapshot import capture_event
 
 
 def visible_conversations(archive, cloud_rows=(), limit=40):
@@ -52,8 +53,7 @@ def transcript_fingerprint(session):
         ev = []
         for e in (entry.get('events') or [])[:8]:
             if isinstance(e, dict):
-                ev.append((str(e.get('name') or ''), str(e.get('label') or ''),
-                           str(e.get('summary') or ''), e.get('success') is True))
+                ev.append(capture_event(e, captured_at=entry.get('created_at')))
         parts.append((entry.get('role'), str(entry.get('content') or ''), ev))
     data = json.dumps(parts, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
     return hashlib.sha256(data).hexdigest()

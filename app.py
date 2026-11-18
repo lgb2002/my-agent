@@ -41,6 +41,7 @@ from core.chat_sessions import (conversation_scope, get_or_migrate_session, appe
 from core.chat_attachments import stored_zip_bytes, zip_record  # noqa: E402
 from core.chat_archive_store import (save_conversation, list_conversations, load_conversation,
     delete_conversation, delete_all_conversations)  # noqa: E402
+from core.chat_history_snapshot import capture_event, refresh_prompt  # noqa: E402
 from core.chat_navigation import (visible_conversations, transcript_fingerprint,
     search_conversations, conversation_group)  # noqa: E402
 from core.ux_actions import suggested_actions, friendly_state, tool_result_label, request_requires_account  # noqa: E402
@@ -122,10 +123,13 @@ def show_recommendation_snapshot(data, idx, turn_id):
 
 
 def show_event(event, idx, turn_id, *, render_detail=True):
-    """Keep tool activity visible without displaying raw payloads by default."""
-    label = str(event.get("label") or event.get("name") or "도구")
-    success = bool(event.get("success"))
-    # A successful tool response does not certify the listing, the risk, or a trade.
+    """Show immutable tool evidence inline in the conversation chronology.
+
+    Historical snapshots are never considered current API state or a license
+    to replay a transaction. Re-fetch actions go through ordinary chat routing.
+    """
+    label = str(event.get('label') or event.get('name') or '도구')
+    success = bool(event.get('success'))
     status = tool_result_label(event.get('name'), success)
     tone = activity_tone(success)
     st.markdown(
@@ -134,26 +138,53 @@ def show_event(event, idx, turn_id, *, render_detail=True):
         '<span class="tool-activity-name">{}</span>'
         '<span class="tool-activity-state">{}</span></div>'.format(
             tone, escape(label), escape(status)), unsafe_allow_html=True)
-    if success and event.get('name') in ('recommend_listings', 'compare'):
-        if 'data' in event and render_detail:
-            show_recommendation_snapshot(event.get('data') or {}, idx, turn_id)
-        elif 'data' not in event:
-            st.caption('도구 요약만 보관되어 있어요. 추천 상세는 최신 매물 조회로 다시 확인해 주세요.')
+    data = event.get('data') if isinstance(event.get('data'), dict) else None
+    is_historical = bool(event.get('historical'))
+    if is_historical:
+        stamp = str(event.get('captured_at') or '')
+        if stamp:
+            try:
+                from datetime import datetime
+                from zoneinfo import ZoneInfo
+                stamp = datetime.fromisoformat(stamp).astimezone(ZoneInfo('Asia/Seoul')).strftime('%Y.%m.%d %H:%M')
+            except (ValueError, TypeError, OverflowError):
+                stamp = ''
+        st.caption('조회 당시 기록' + (' · '+stamp if stamp else '') + ' · 현재 가격·거래 상태가 아닙니다.')
+    if render_detail and success and data:
+        name = event.get('name')
+        # Render only bounded presentation data, never untrusted raw API
+        # responses from a loaded conversation as executable input.
+        if name == 'search_listings':
+            with st.expander('조회 당시 매물 목록', expanded=True):
+                show_search_workspace(data, interactive=False)
+        elif name in ('recommend_listings','compare'):
+            with st.expander('당시 추천 후보와 근거', expanded=True):
+                show_recommendation_snapshot(data, idx, turn_id)
+        elif name in ('inspect_listing','inspect_attached_zip'):
+            with st.expander('당시 검토 항목', expanded=True):
+                show_inspection_workspace(data)
         else:
-            st.caption('추천 결과는 위 작업 공간에서 확인할 수 있어요.')
-    with st.expander("실행 결과와 근거 보기", expanded=False):
-        st.caption(str(event.get("summary") or ""))
-        data = event.get("data") or {}
-        if data:
-            st.json(data, expanded=False)
+            with st.expander('조회 당시 결과 상세', expanded=False):
+                st.json(data, expanded=False)
+    elif success and not data and event.get('name') in ('search_listings','recommend_listings',
+                                                       'inspect_listing','inspect_attached_zip'):
+        st.caption('이전 형식으로 저장된 결과는 도구 요약만 있어요. 새 조회부터 상세 기록이 저장됩니다.')
+    elif event.get('summary'):
+        with st.expander('실행 요약', expanded=False):
+            st.caption(str(event.get('summary') or '')[:350])
+    if is_historical:
+        rerun = refresh_prompt(event)
+        if rerun and st.button('최신 정보 다시 조회', key='refresh_snapshot_{}_{}'.format(turn_id,idx)):
+            st.session_state['queued_tool_prompt_v015'] = rerun
+            st.rerun()
 
 
 def show_turn(turn, idx):
-    is_user = turn["role"] == "user"
-    with st.chat_message("user" if is_user else "assistant", avatar="👤" if is_user else "🧭"):
-        st.markdown(turn["content"])
-        for no, event in enumerate(turn.get("events") or []):
-            show_event(event, no, idx, render_detail=False)
+    is_user = turn['role'] == 'user'
+    with st.chat_message('user' if is_user else 'assistant', avatar='👤' if is_user else '🧭'):
+        st.markdown(turn['content'])
+        for no, event in enumerate(turn.get('events') or []):
+            show_event(event, no, idx, render_detail=True)
 
 
 def pending_ui(session, actor_name):
@@ -290,7 +321,7 @@ def is_listing_uuid(value):
         return False
 
 
-def show_search_workspace(data):
+def show_search_workspace(data, *, interactive=True):
     listings = data.get('listings') or []
     if not isinstance(listings, list):
         listings = []
@@ -316,14 +347,15 @@ def show_search_workspace(data):
     selectable = [(str(item.get('id')), '{}. {}'.format(i, str(item.get('title') or '제목 미확인')[:65]))
                   for i, item in enumerate(listings[:15], 1) if isinstance(item,dict)
                   and isinstance(item.get('id'),str) and is_listing_uuid(item['id'])]
-    if selectable:
+    if selectable and interactive:
         chosen = st.selectbox('검토할 프로젝트', selectable, format_func=lambda item:item[1],
                               key='search_selection_v0173')
         if st.button('선택한 매물 공개 정보 검토', key='search_inspect_v0173'):
             st.session_state['queued_tool_prompt_v015'] = '{} 매물의 공개 정보를 검토해줘'.format(chosen[0])
             st.rerun()
     if data.get('next_cursor') is not None:
-        st.caption('다음 페이지가 있어요. 아래 ‘다음 매물 보기’로 계속 조회할 수 있어요.')
+        st.caption('조회 당시 다음 페이지가 있었어요. 현재 목록은 다시 조회해야 합니다.' if not interactive
+                   else '다음 페이지가 있어요. 아래 ‘다음 매물 보기’로 계속 조회할 수 있어요.')
 
 
 def show_inspection_workspace(data):
@@ -436,6 +468,8 @@ def render_primary_workspace(view, session, actor):
 
 
 def show_contextual_actions(view, session, authenticated, uploaded):
+    if session.get('_historical_restore'):
+        return None  # Old tool snapshots have no live pagination/ordinal state.
     actions = focused_actions(view, session['context'], authenticated, offer_enabled=bool(ENABLE_LIVE_DRAFTS))
     # Fallback contextual suggestions, without duplicating identical commands.
     if not actions and view['focus'] not in ('welcome','offer'):
@@ -810,9 +844,14 @@ def show_settings_dialog(scope, current, active_archive, cloud_owner, actor,
             if usage:
                 st.caption('AI 오늘 사용 · {} / {}회'.format(usage['calls'], usage['max_calls']))
         if connected:
+            if st.button('다른 계정으로 로그인', key='settings_change_account_v0190'):
+                _logout_from_settings(broker_requested=broker_requested, platform_issuer=platform_issuer,
+                                      auth_settings=auth_settings, token=token)
             if st.button('로그아웃', key='settings_logout_v0189'):
                 _logout_from_settings(broker_requested=broker_requested, platform_issuer=platform_issuer,
                                       auth_settings=auth_settings, token=token)
+        else:
+            st.link_button('ProjectAgain에서 회원가입', MARKETPLACE_BASE_URL)
         with st.expander('사용 가능한 도구 · {}개'.format(len(TOOL_LABELS)), expanded=False):
             for tool_key in ('search_listings','recommend_listings','inspect_listing',
                              'get_buyer_preferences','list_offers','get_handover',
@@ -957,17 +996,6 @@ with st.sidebar:
             st.session_state.pop('pending_zip_v0189', None)
             start_conversation(active_archive)
             st.rerun()
-        with st.container(key='sidebar_shortcuts_v0189'):
-            st.markdown('<div class="sidebar-quick-label">바로가기</div>', unsafe_allow_html=True)
-            left_quick, right_quick = st.columns(2, gap='small')
-            with left_quick:
-                if st.button('⌕ 매물 탐색', key='sidebar_find_v0189', width='stretch'):
-                    st.session_state['queued_tool_prompt_v015'] = '현재 등록된 매물 목록 보여줘'
-                    st.rerun()
-            with right_quick:
-                if st.button('✧ 맞춤 추천', key='sidebar_recommend_v0189', width='stretch'):
-                    st.session_state['queued_tool_prompt_v015'] = '나에게 맞는 프로젝트 추천해줘'
-                    st.rerun()
         st.markdown('<div class="sidebar-chat-title">최근 대화</div>', unsafe_allow_html=True)
         search_term = st.text_input('대화 검색', placeholder='대화 제목 검색',
                                     key='chat_search_v0188', label_visibility='collapsed')
@@ -1046,12 +1074,23 @@ with st.sidebar:
             if pref_owner and storage_health()['ready']:
                 current['context']['_persist_owner'] = pref_owner
         with account_panel:
-            if connected:
-                st.markdown('<div class="sidebar-user-identity"><span class="status-dot"></span>ProjectAgain 계정 연결됨</div>', unsafe_allow_html=True)
-            if st.button('⚙ 설정', key='open_settings_v0189', width='stretch'):
-                show_settings_dialog(scope, current, active_archive, cloud_owner,
-                                     actor, token, connected, broker_requested,
-                                     platform_issuer, auth_settings, ai_identity)
+            with st.popover('계정 · 설정 ▾', use_container_width=True):
+                if connected:
+                    st.caption('ProjectAgain 계정으로 연결됨')
+                    if st.button('다른 계정으로 로그인', key='account_switch_v0190', width='stretch'):
+                        _logout_from_settings(broker_requested=broker_requested, platform_issuer=platform_issuer,
+                                              auth_settings=auth_settings, token=token)
+                else:
+                    st.caption('계정 연결 전에는 대화가 이 브라우저에만 남아요.')
+                    st.link_button('ProjectAgain 회원가입', MARKETPLACE_BASE_URL, use_container_width=True)
+                if st.button('⚙ 설정', key='open_settings_v0189', width='stretch'):
+                    show_settings_dialog(scope, current, active_archive, cloud_owner,
+                                         actor, token, connected, broker_requested,
+                                         platform_issuer, auth_settings, ai_identity)
+                st.link_button('ProjectAgain 웹사이트', MARKETPLACE_BASE_URL, use_container_width=True)
+                if connected and st.button('로그아웃', key='account_logout_v0190', width='stretch'):
+                    _logout_from_settings(broker_requested=broker_requested, platform_issuer=platform_issuer,
+                                          auth_settings=auth_settings, token=token)
         uploaded = selected_zip_for_scope(scope, active_archive['active'])
 
 # ── Main: state-aware project workbench (results first; transcript on demand). ──
@@ -1062,8 +1101,8 @@ st.markdown('''<div class="workspace-bar"><div class="workspace-name">프로젝�
 <div class="workspace-meta"><span class="status-dot"></span>{}</div></div>'''.format(escape(mode_title)), unsafe_allow_html=True)
 
 session = current
-if st.session_state.pop('archive_restore_notice_v0172', False):
-    st.info('대화 문장만 불러왔어요. 원본 매물 데이터와 거래 상태는 플랫폼에서 다시 조회해 주세요.')
+# Open restored conversations directly as main chat; no intrusive blue warning.
+st.session_state.pop('archive_restore_notice_v0172', False)
 pending_prompt = None
 workbench = workspace_view(session)
 # The exact current task determines reading or comparison width. No JavaScript
@@ -1074,9 +1113,8 @@ st.markdown('<div class="pa-layout-mode pa-layout-mode--{}" aria-hidden="true"><
 
 # First entry retains the restrained welcome. After first request the current
 # task result becomes the primary workspace, not a nested chat bubble.
-if workbench['focus'] != 'welcome':
-    with st.container(key='primary_workbench_v0173'):
-        render_primary_workspace(workbench, session, actor)
+# Conversation is the primary surface. Historic tool results live in the
+# message where they happened; no duplicate results-first workbench.
 
 welcome_input = None
 if not session["turns"]:
@@ -1105,8 +1143,17 @@ if not session["turns"]:
                     if st.button(title, width='stretch', key='welcome_' + str(idx)):
                         pending_prompt = prompt
 
-# A pending task is secondary to the result, unless it requests immediate
-# input/approval. Keep the precise progression and existing safe controls.
+# Existing or freshly generated messages are shown inline, not inside a
+# separate "대화 기록" expander. Results follow the turn that produced them.
+if session['turns']:
+    with st.container(key='conversation_history_v0174'):
+        for i, turn in enumerate(session['turns']):
+            show_turn(turn, i)
+
+if session.get('pending'):
+    # Fresh approval card only: load_conversation() never restores pending.
+    pending_ui(session, actor)
+
 plan = session['context'].get('workflow')
 if isinstance(plan, dict) and plan.get('status') not in ('CANCELLED',):
     view = workflow_view(plan)
@@ -1168,11 +1215,9 @@ if isinstance(plan, dict) and plan.get('status') not in ('CANCELLED',):
                     add_turn(session,'assistant','진행 중이던 작업 계획을 중단했어. 이미 완료된 조회 기록은 대화에 남아 있어.')
                     st.rerun()
 
-
 if connection_error:
     st.warning(connection_error)
-# The next action is tied to the currently visible result, not a permanent row
-# of generic tool buttons above the conversation.
+# Contextual actions are optional; never replace or obscure the transcript.
 if session['turns']:
     next_prompt = show_contextual_actions(workbench, session, bool(token), uploaded)
     if next_prompt:
@@ -1180,16 +1225,30 @@ if session['turns']:
     if session['context'].get('recommendation_intake'):
         st.caption('부족한 조건은 아래 대화 입력창에 한 번에 작성해도 돼요. 취소하려면 ‘취소’라고 말해 주세요.')
 
-# A full, accessible transcript stays in the current conversation, without a
-# fixed-height nested scrollbar or a second copy of the recommendation cards.
-if session['turns']:
-    st.markdown('<div class="conversation-history-separator"></div>',unsafe_allow_html=True)
-    with st.container(key='conversation_history_v0174'):
-        with st.expander('대화 기록 · {}개 메시지'.format(len(session['turns'])),
-                         expanded=workbench['focus'] in ('conversation', 'restored')):
-            st.caption('과거 답변은 당시 조회 내용을 바탕으로 해요. 실제 매물 정보와 거래 상태는 새로 확인해 주세요.')
-            for i, turn in enumerate(session['turns']):
-                show_turn(turn, i)
+# ZIP inspection is an optional contextual tool, not a permanent sidebar button.
+# The settings dialog retains the legacy safe uploader for compatibility.
+if token and session['turns'] and any(
+        word in str(t.get('content') or '').lower() for t in session['turns'][-4:]
+        if isinstance(t,dict) for word in ('zip','압축파일','정적 검사')):
+    with st.expander('ZIP 정적 검사 · 선택한 대화에서만 사용', expanded=False):
+        st.caption('본인 매물만 검사 · 최대 4MB · 파일은 Supabase 대화 기록에 저장되지 않습니다.')
+        inline_file = st.file_uploader('검사할 ZIP', type=['zip'], key='inline_zip_v0190')
+        if inline_file is not None:
+            try:
+                inline_bytes = inline_file.getvalue()
+                st.session_state['pending_zip_v0189'] = zip_record(
+                    scope, active_archive['active'], inline_bytes)
+                st.caption('파일 선택됨 · 검사를 시작하기 전에는 도구에 전달되지 않아요.')
+            except ValueError:
+                st.error('최대 4MB ZIP 파일만 사용할 수 있어요.')
+        ready = stored_zip_bytes(st.session_state.get('pending_zip_v0189'),
+                                 scope, active_archive['active'], require_armed=False)
+        if ready is not None:
+            if st.button('이 대화에서 검사 시작', key='inline_zip_start_v0190'):
+                st.session_state['pending_zip_v0189'] = zip_record(
+                    scope,active_archive['active'],ready,armed=True)
+                st.session_state['queued_tool_prompt_v015'] = '첨부한 ZIP 파일을 정적으로 검사해줘'
+                st.rerun()
 
 # Follow-up actions submit through exactly the same validation/tool path as typed text.
 queued_followup = st.session_state.pop('queued_tool_prompt_v015', None)
@@ -1276,4 +1335,4 @@ if submitted:
                 session["pending"] = result["pending"]
         st.rerun()
 
-st.markdown('<p class="footer-note">추천과 분석은 참고 자료입니다. 실거래 승인·실행과 자산 이전은 ProjectAgain 플랫폼에서만 처리합니다.</p>', unsafe_allow_html=True)
+# Trade boundaries remain enforced in pending_ui, tool labels and platform permissions.

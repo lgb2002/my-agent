@@ -23,17 +23,24 @@ def get_or_migrate_session(store, scope, legacy_scopes=()):
 
 
 def append_turn(session, role, content, **kwargs):
-    session['turns'].append({'role': role, 'content': content, **kwargs})
+    if role == 'user':
+        session.pop('_historical_restore', None)
+    session['turns'].append({'role': role, 'content': content, 'created_at': _now(), **kwargs})
     session['updated_at'] = datetime.now(timezone.utc).isoformat()
 
 
 def conversation_title(session):
-    """Use the first *user* message, not tool output or private metadata."""
+    """Choose earliest meaningful user request; don't title work just '안녕'."""
+    messages=[]
     for turn in session.get('turns', []):
-        if turn.get('role') == 'user':
-            name = ' '.join(str(turn.get('content') or '').split())
-            return (name[:36] + ('…' if len(name) > 36 else '')) or '새 대화'
-    return '새 대화'
+        if isinstance(turn,dict) and turn.get('role') == 'user':
+            value=' '.join(str(turn.get('content') or '').split())
+            if value:
+                messages.append(value)
+    greetings={'안녕','안녕하세요','하이','hi','hello','ㅎㅇ','고마워','감사합니다'}
+    chosen = next((v for v in messages if v.casefold() not in greetings and len(v)>5),
+                  messages[0] if messages else '새 대화')
+    return chosen[:36] + ('…' if len(chosen)>36 else '')
 
 
 def _now():

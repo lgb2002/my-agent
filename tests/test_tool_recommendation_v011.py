@@ -109,7 +109,7 @@ class ToolAccessUiTest(unittest.TestCase):
         self.assertTrue(visible)
         self.assertIn('workspace_action_v0173_',source)
         self.assertIn("if session['turns']:",source)
-        self.assertIn('실행 결과와 근거 보기',source)
+        self.assertIn('조회 당시 결과 상세',source)
         self.assertIn('tool-activity',source)
 
     def test_tool_badge_escapes_untrusted_text(self):

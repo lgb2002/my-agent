@@ -1,12 +1,11 @@
 {
-  "timestamp_utc": "2026-11-18T04:39:23.705651+00:00",
-  "python": "3.13.5",
-  "os": "Linux-6.18.57-x86_64-with-glibc2.41",
-  "test_count": 280,
-  "passed": 280,
+  "timestamp_utc": "2026-11-18T05:10:43.331620+00:00",
+  "python": "3.13.x (container)",
+  "test_count": 286,
+  "passed": 286,
   "failed": 0,
   "errors": 0,
   "skipped": 0,
-  "scope": "동일 Python 프로세스 내부 기능 검증. Streamlit UI 실기동/Windows Python3.12/실Replit/OpenAI API 호출은 미검증",
+  "scope": "Python offline unit tests; Streamlit Cloud/real Supabase and multi-browser E2E not executed",
   "failures": []
 }
