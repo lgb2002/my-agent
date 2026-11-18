@@ -3,7 +3,8 @@
 The browser's active conversation is authoritative while it is in memory.
 Cloud records are metadata only until explicitly selected by the owner.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 import hashlib
 import json
 
@@ -56,3 +57,29 @@ def transcript_fingerprint(session):
         parts.append((entry.get('role'), str(entry.get('content') or ''), ev))
     data = json.dumps(parts, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
     return hashlib.sha256(data).hexdigest()
+
+
+def search_conversations(rows, query):
+    """Filter the visible *title metadata*, never content or private API payloads."""
+    value = ' '.join(str(query or '').casefold().split())
+    if not value:
+        return list(rows)
+    return [row for row in rows if value in ' '.join(str(row.get('title') or '').casefold().split())]
+
+
+def conversation_group(updated_at, *, now=None):
+    """Group by calendar date in Korea; naïve DB timestamps are UTC."""
+    korea = ZoneInfo('Asia/Seoul')
+    now = (now or datetime.now(timezone.utc)).astimezone(korea)
+    try:
+        timestamp = datetime.fromisoformat(str(updated_at).replace('Z', '+00:00'))
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
+        day = timestamp.astimezone(korea).date()
+    except (TypeError, ValueError, OverflowError):
+        return '이전 대화'
+    if day == now.date():
+        return '오늘'
+    if day >= (now - timedelta(days=7)).date() and day < now.date():
+        return '지난 7일'
+    return '이전 대화'

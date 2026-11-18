@@ -1,8 +1,20 @@
+# ProjectAgain Agent v0.18.8 — 대화 중심 화면 · 로그인 계정 자동 저장
+
+**변경:** 첫 화면의 자연어 입력창을 안내 영역 바로 아래로 이동하고 시작 카드를 간소화했습니다. 왼쪽 메뉴는 `새 대화 → 대화 검색 → 날짜별 대화 목록`을 중심으로 구성하고, 계정 메뉴는 하단으로 이동했습니다. 필요 없는 상시 도구 나열과 일반 사용자용 진단 버튼은 제거하거나 숨겼습니다.
+
+**대화 저장:** 본인 ProjectAgain 계정 연결이 확인되고 `AGENT_STATE_DATABASE_URL`의 PostgreSQL에 접근 가능하면 대화 문장과 안전한 도구 요약을 **자동 저장**합니다. 기존 수동 저장/자동 저장 선택 토글은 더 이상 노출하지 않습니다. 로그인하지 않은 사용자의 대화는 기존처럼 브라우저 세션에만 남습니다. 대화별 삭제와 전체 대화 삭제를 제공하며, 전체 삭제는 구매 조건·작업 계획·계정을 지우지 않습니다. 비밀정보가 포함되었다고 감지된 대화나 저장 용량을 초과한 경우에는 저장을 건너뛰고 일반 메시지로 안내합니다. 작업 승인카드·원본 API 데이터·토큰·ZIP 첨부는 저장하지 않습니다.
+
+**배포:** 기존 v0.18.7 ZIP 파일을 기준으로 누적 변경했습니다. 새로운 Secrets·패키지·Replit 재배포·Supabase 스키마 초기화가 필요하지 않습니다. GitHub에 전체 프로젝트 코드를 반영하고 Streamlit Cloud 앱을 재시작하세요. 사용자 데이터, 개인 `.env` 및 Streamlit Secrets는 덮어쓰지 마세요. 실제 Streamlit Cloud 브라우저 상호작용과 타 기기 복원 검증은 아직 필요합니다.
+
+상세: [`docs/CHAT_UI_AUTOSAVE_V0188.md`](docs/CHAT_UI_AUTOSAVE_V0188.md).
+
+---
+
 # ProjectAgain Agent v0.18.7 — 대화 중심 UI · Supabase 대화 저장
 
 이번 버전은 첫 화면에 윤곽이 있는 시작 영역·4개의 작업 카드와 **독립된 대화 목록을 사이드바에 바로 표시**합니다. 사용자용 DB/운영 진단 버튼은 숨겼으며, 기존 진단 모듈은 개발자용 코드로 유지합니다.
 
-**클라우드 대화 저장은 기본 OFF입니다.** 실제 ProjectAgain 계정으로 로그인하고 왼쪽의 `Supabase에 자동 저장`을 켜면, 기존 `AGENT_STATE_DATABASE_URL`의 PostgreSQL에 대화 문장과 안전한 도구 요약을 계정별로 저장합니다. 별도 Supabase 키나 새로운 Secrets는 필요하지 않습니다. 과거 저장 대화는 동일한 목록에서 복원할 수 있습니다. 상세 설명: [`docs/CHAT_NAVIGATION_V0187.md`](docs/CHAT_NAVIGATION_V0187.md).
+**(v0.18.7 당시 동작, v0.18.8에서 변경됨)** 클라우드 대화 저장은 기본 OFF였습니다. 실제 ProjectAgain 계정으로 로그인하고 왼쪽의 `Supabase에 자동 저장`을 켜면, 기존 `AGENT_STATE_DATABASE_URL`의 PostgreSQL에 대화 문장과 안전한 도구 요약을 계정별로 저장합니다. 별도 Supabase 키나 새로운 Secrets는 필요하지 않습니다. 과거 저장 대화는 동일한 목록에서 복원할 수 있습니다. 상세 설명: [`docs/CHAT_NAVIGATION_V0187.md`](docs/CHAT_NAVIGATION_V0187.md).
 
 기존 OAuth Broker 자동 갱신, 실제 API 전용 정책, 9개 도구, 승인/거래 경계, `DESIGN.md` 원칙을 유지합니다. `data/`, `.env`, `.venv`, 기존 Secrets 및 사용자 DB는 덮어쓰지 마세요. 오프라인 테스트 및 정적 CSS QA는 완료했고 **실제 Streamlit Cloud/Supabase 다중 기기 검증은 미완료**입니다.
 

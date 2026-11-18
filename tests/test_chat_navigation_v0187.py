@@ -111,7 +111,7 @@ class NavigationV0187(unittest.TestCase):
         self.assertNotIn("with st.expander('대화 보관함",app)
         self.assertNotIn("with st.expander('대화 장기 보관",app)
         self.assertNotIn('DB 연결 진단 실행',app)
-        self.assertIn("st.toggle('Supabase에 자동 저장'",app)
+        self.assertNotIn("st.toggle('Supabase에 자동 저장'",app)
         self.assertIn("st.button('⋯', key='chat_more_v0187_'",app)
         self.assertIn('with st.container(key=\'welcome_tile_\'',app)
         self.assertIn('border:1px solid var(--line-strong)',css)

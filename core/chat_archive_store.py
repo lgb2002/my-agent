@@ -1,4 +1,4 @@
-"""Opt-in, account-scoped cloud conversation history.
+"""Account-scoped cloud conversation history for authenticated users.
 
 Only text and safe tool *summaries* are stored; no bearer tokens, arbitrary
 API payloads, pending approval cards, private tool results, or workflow auth.
@@ -129,3 +129,11 @@ def set_chat_auto_save(owner, enabled):
             VALUES(?,?,CURRENT_TIMESTAMP) ON CONFLICT(owner_key)
             DO UPDATE SET auto_save=excluded.auto_save,updated_at=CURRENT_TIMESTAMP'''),
             (owner, int(enabled)))
+
+
+def delete_all_conversations(owner):
+    """Erase only the verified owner's saved chat transcripts (not preferences/jobs)."""
+    _guard_owner(owner)
+    with _LOCK, _db_connection() as con:
+        con.execute(_CREATE)
+        con.execute(_sql('DELETE FROM agent_saved_conversations WHERE owner_key=?'), (owner,))

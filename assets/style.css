@@ -386,3 +386,71 @@ html,body,[data-testid="stApp"] {
 @media (prefers-reduced-motion: reduce) {
   .st-key-welcome_actions [class*="st-key-welcome_tile_"] {transition:none;}
 }
+
+/* v0.18.8 — chat-first welcome and conversation-first sidebar */
+[data-testid="stSidebar"] .st-key-sidebar_chat_panel_v0188 {
+  min-width:0;
+}
+[data-testid="stSidebar"] .st-key-sidebar_account_panel_v0188 {
+  margin-top:22px;padding-top:17px;border-top:1px solid var(--line-strong);
+}
+[data-testid="stSidebar"] .st-key-sidebar_account_panel_v0188 .sidebar-heading {
+  font-size:.81rem;color:var(--muted);font-weight:710;
+}
+[data-testid="stSidebar"] .st-key-sidebar_chat_panel_v0188 .sidebar-chat-title {
+  font-size:.78rem;text-transform:uppercase;letter-spacing:.09em;
+  margin:0 0 8px;color:var(--muted);
+}
+[data-testid="stSidebar"] .st-key-sidebar_chat_panel_v0188 .sidebar-chat-section {
+  font-size:.73rem;letter-spacing:0;font-weight:730;margin:12px 0 5px;
+}
+[data-testid="stSidebar"] .st-key-sidebar_chat_panel_v0188 [data-testid="stTextInput"] input {
+  border:1px solid var(--line-strong);background:#fff;border-radius:10px;
+  padding:8px 12px;min-height:40px;font-size:.86rem;
+}
+[data-testid="stSidebar"] .st-key-sidebar_chat_panel_v0188 [data-testid="stTextInput"] input:focus {
+  border-color:var(--focus);box-shadow:var(--shadow-focus);
+}
+[data-testid="stSidebar"] [class*="st-key-chat_nav_row_v0187_"] .stButton button {
+  min-height:38px;border-radius:7px;
+}
+/* First-run focal region: a question, native input, and compact helpers. */
+.welcome {
+  margin:25px 0 0;padding:28px clamp(22px,3.5vw,37px) 9px;
+  background:var(--paper);border:1px solid var(--line-strong);
+  border-bottom:0;border-radius:18px 18px 0 0;box-shadow:none;
+}
+.welcome-eyebrow {margin-bottom:13px;font-size:.72rem;letter-spacing:.1em;}
+.welcome-title {font-size:clamp(1.9rem,3vw,2.3rem);line-height:1.27;max-width:620px;}
+.welcome-description {font-size:.94rem;margin:12px 0 9px;max-width:650px;line-height:1.58;}
+.st-key-welcome_input_v0188 {
+  margin-top:-.82rem;padding:12px clamp(20px,3.5vw,34px) 21px;
+  background:var(--paper);border:1px solid var(--line-strong);
+  border-top:0;border-radius:0 0 18px 18px;
+  box-shadow:0 8px 25px rgba(19,48,31,.035);
+}
+.st-key-welcome_input_v0188 [data-testid="stChatInput"] {
+  max-width:none;margin:0;border:1px solid #A8BEAC;
+  border-radius:12px;box-shadow:0 1px 4px rgba(23,55,35,.04);
+}
+.st-key-welcome_input_v0188 [data-testid="stChatInput"]:focus-within {
+  box-shadow:var(--shadow-focus);border-color:var(--focus);
+}
+.st-key-welcome_actions {margin-top:18px;}
+.st-key-welcome_actions .welcome-actions-heading {margin-bottom:10px;}
+.st-key-welcome_actions .welcome-actions-title {font-size:.82rem;color:var(--muted);}
+.st-key-welcome_actions [class*="st-key-welcome_tile_"] {
+  padding:14px 17px 10px;min-height:112px;
+  border-radius:12px;background:#fff;border:1px solid var(--line);
+}
+.st-key-welcome_actions .stButton>button:not([kind="primary"]) {
+  min-height:36px;font-size:.95rem;padding:0;text-align:left;
+}
+.st-key-welcome_actions .suggestion-hint {font-size:.82rem;line-height:1.5;margin:3px 0 0;}
+@media (max-width:760px) {
+  .welcome {margin:12px 0 0;padding:22px 18px 8px;border-radius:15px 15px 0 0;}
+  .welcome-title {font-size:clamp(1.73rem,6.9vw,2.05rem);}
+  .welcome-description {font-size:.88rem;}
+  .st-key-welcome_input_v0188 {padding:10px 16px 17px;border-radius:0 0 15px 15px;}
+  .st-key-welcome_actions [class*="st-key-welcome_tile_"] {min-height:0;padding:11px 14px 10px;}
+}

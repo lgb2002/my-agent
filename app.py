@@ -39,8 +39,9 @@ from core.config import MARKETPLACE_BASE_URL  # noqa: E402
 from core.chat_sessions import (conversation_scope, get_or_migrate_session, append_turn,
     init_archive, start_conversation, open_conversation, remove_conversation)  # noqa: E402
 from core.chat_archive_store import (save_conversation, list_conversations, load_conversation,
-    delete_conversation, chat_auto_save_enabled, set_chat_auto_save)  # noqa: E402
-from core.chat_navigation import visible_conversations, transcript_fingerprint  # noqa: E402
+    delete_conversation, delete_all_conversations)  # noqa: E402
+from core.chat_navigation import (visible_conversations, transcript_fingerprint,
+    search_conversations, conversation_group)  # noqa: E402
 from core.ux_actions import suggested_actions, friendly_state, tool_result_label, request_requires_account  # noqa: E402
 from core.workflow_store import (verified_owner, save_preferences, load_preferences,
     delete_preferences, list_workflows, load_workflow, delete_workflow, storage_kind, storage_health)  # noqa: E402
@@ -594,6 +595,10 @@ visitor = st.session_state.setdefault("visitor_uuid_v06", uuid.uuid4().hex)
 with st.sidebar:
     st.markdown('<div class="brand"><span class="brand-symbol">◈</span><span>ProjectAgain</span></div>',
                 unsafe_allow_html=True)
+    # Streamlit containers establish sidebar visual order independently of
+    # execution order: auth must resolve before account-scoped chat navigation.
+    chat_panel = st.container(key='sidebar_chat_panel_v0188')
+    account_panel = st.container(key='sidebar_account_panel_v0188')
 
     actor = "ProjectAgain 사용자"
     # Platform-registered demo listings are a normal API filter, NOT a local sandbox.
@@ -615,120 +620,109 @@ with st.sidebar:
         'PROJECTAGAIN_BROKER_CLIENT_ID','PROJECTAGAIN_BROKER_CLIENT_SECRET',
         'PROJECTAGAIN_API_ORIGIN','AGENT_BROKER_STORE_KEY',
         'PROJECTAGAIN_BROKER_REDIRECT_URL'))
-    st.markdown('<div class="sidebar-heading">ProjectAgain 계정</div>', unsafe_allow_html=True)
-    if broker_requested:
-        login,refresh_handler=broker_connect_ui(MARKETPLACE_BASE_URL,configured)
-        token=login.access_token if login and login.connected else ''
-        connected=bool(token)
-        set_request_context(token=token,visitor_id=visitor,include_demo=show_demo)
-        set_broker_refresh_handler(refresh_handler)
-        ai_identity=login.ai_identity if connected else None
-        set_ai_identity(ai_identity)
-    else:
-        login = resolve_login(st.user, MARKETPLACE_BASE_URL, expected_issuer=platform_issuer) if configured else None
-        token = login.access_token if login and login.connected else ''
-        connected = bool(token)
-        set_request_context(token=token, visitor_id=visitor, include_demo=show_demo)
-        ai_identity = login.ai_identity if connected else None
-        set_ai_identity(ai_identity)
-        if connected:
-            st.caption('계정 연결됨 · 개인화 기능 이용 가능')
-            if 'offer:draft' not in login.scopes and ENABLE_LIVE_DRAFTS:
-                st.caption('구매 제안 초안 등록은 추가 권한 동의가 필요해요.')
-                if auth_settings.get('drafts') and st.button('제안 초안 권한 추가', key='oidc_draft_scope_v018', width='stretch'):
-                    st.login('drafts')
-            if st.button('로그아웃', key='oidc_logout_v018', width='stretch'):
-                # Platform revocation is best-effort. Streamlit logout always clears
-                # its own identity cookie; no private data is shown after logout.
-                revoke_access(token, platform_issuer, str(auth_settings.get('client_id') or ''),
-                              str(auth_settings.get('client_secret') or ''))
-                set_request_context(token='', visitor_id=visitor, include_demo=show_demo)
-                set_ai_identity(None)
-                st.logout()
-        elif not configured:
-            st.info('통합 로그인 설정을 준비 중이에요. 공개 매물은 로그인 없이 볼 수 있어요.')
+    with account_panel:
+        st.markdown('<div class="sidebar-heading">ProjectAgain 계정</div>', unsafe_allow_html=True)
+        if broker_requested:
+            login,refresh_handler=broker_connect_ui(MARKETPLACE_BASE_URL,configured)
+            token=login.access_token if login and login.connected else ''
+            connected=bool(token)
+            set_request_context(token=token,visitor_id=visitor,include_demo=show_demo)
+            set_broker_refresh_handler(refresh_handler)
+            ai_identity=login.ai_identity if connected else None
+            set_ai_identity(ai_identity)
         else:
-            if login and login.status == 'expired':
-                st.warning(login.message)
-                if st.button('다시 로그인', key='oidc_reauth_v018', width='stretch'):
-                    # Native Streamlit does not expose refresh tokens. Explicitly
-                    # restart login rather than reusing expired API credentials.
+            login = resolve_login(st.user, MARKETPLACE_BASE_URL, expected_issuer=platform_issuer) if configured else None
+            token = login.access_token if login and login.connected else ''
+            connected = bool(token)
+            set_request_context(token=token, visitor_id=visitor, include_demo=show_demo)
+            ai_identity = login.ai_identity if connected else None
+            set_ai_identity(ai_identity)
+            if connected:
+                st.caption('계정 연결됨 · 개인화 기능 이용 가능')
+                if 'offer:draft' not in login.scopes and ENABLE_LIVE_DRAFTS:
+                    st.caption('구매 제안 초안 등록은 추가 권한 동의가 필요해요.')
+                    if auth_settings.get('drafts') and st.button('제안 초안 권한 추가', key='oidc_draft_scope_v018', width='stretch'):
+                        st.login('drafts')
+                if st.button('로그아웃', key='oidc_logout_v018', width='stretch'):
+                    # Platform revocation is best-effort. Streamlit logout always clears
+                    # its own identity cookie; no private data is shown after logout.
+                    revoke_access(token, platform_issuer, str(auth_settings.get('client_id') or ''),
+                                  str(auth_settings.get('client_secret') or ''))
+                    set_request_context(token='', visitor_id=visitor, include_demo=show_demo)
+                    set_ai_identity(None)
                     st.logout()
-            elif login and login.status in ('invalid', 'unavailable'):
-                st.warning(login.message or '로그인 연결 상태를 확인하지 못했어요.')
-                if st.button('로그인 다시 시작', key='oidc_invalid_v018', width='stretch'):
-                    st.logout()
+            elif not configured:
+                st.info('통합 로그인 설정을 준비 중이에요. 공개 매물은 로그인 없이 볼 수 있어요.')
             else:
-                st.caption('공개 매물 조회는 로그인 없이 사용할 수 있어요.')
-                if st.button('ProjectAgain 계정으로 로그인', key='oidc_login_v018',
-                             type='primary', width='stretch'):
-                    st.login()
-    if ENABLE_OPENAI_CHAT and OPENAI_API_KEY:
-        if ai_identity:
-            usage = usage_snapshot(ai_identity)
-            if usage:
-                st.caption('AI 오늘 사용 · {} / {}회'.format(usage['calls'], usage['max_calls']))
+                if login and login.status == 'expired':
+                    st.warning(login.message)
+                    if st.button('다시 로그인', key='oidc_reauth_v018', width='stretch'):
+                        # Native Streamlit does not expose refresh tokens. Explicitly
+                        # restart login rather than reusing expired API credentials.
+                        st.logout()
+                elif login and login.status in ('invalid', 'unavailable'):
+                    st.warning(login.message or '로그인 연결 상태를 확인하지 못했어요.')
+                    if st.button('로그인 다시 시작', key='oidc_invalid_v018', width='stretch'):
+                        st.logout()
+                else:
+                    st.caption('공개 매물 조회는 로그인 없이 사용할 수 있어요.')
+                    if st.button('ProjectAgain 계정으로 로그인', key='oidc_login_v018',
+                                 type='primary', width='stretch'):
+                        st.login()
+        if ENABLE_OPENAI_CHAT and OPENAI_API_KEY:
+            if ai_identity:
+                usage = usage_snapshot(ai_identity)
+                if usage:
+                    st.caption('AI 오늘 사용 · {} / {}회'.format(usage['calls'], usage['max_calls']))
+                else:
+                    st.caption('AI 사용량 저장소 연결 확인 필요 · 오류 시 AI 호출 차단')
             else:
-                st.caption('AI 사용량 저장소 연결 확인 필요 · 오류 시 AI 호출 차단')
-        else:
-            st.caption('AI 대화는 로그인과 사용량 저장소 연결 후 이용할 수 있어요.')
-    owner_scope = login.owner_key[:12] if connected else visitor
-    scope = conversation_scope('live', actor, owner_scope)
-    # Before v0.10, demo-filter switches created separate chat scopes.
-    old_scopes = [scope + '::' + str(show_demo), scope + '::' + str(not show_demo)]
-    current = get_session(scope, old_scopes)
-    # A search filter change must not erase the chat, but old search ordinals
-    # must not accidentally point to a listing excluded by the new filter.
-    previous_filter = current.get("_include_demo_filter")
-    if previous_filter is not None and previous_filter != show_demo:
-        current['context']['_listing_snapshot_stale'] = True
-        for context_key in ("recent_listings", "listing_next_cursor", "last_search_query"):
-            current["context"].pop(context_key, None)
-    current["_include_demo_filter"] = show_demo
-    # v0.17.1 migration: preserve the old live session as the first archived chat.
-    archive = st.session_state.setdefault('conversation_archive_v0172', {})
-    # Always initialize through the archive helper: do not insert a None
-    # placeholder with setdefault(), which crashes on a visitor's first load.
-    # The helper also recovers a None placeholder left by earlier app versions.
-    current = init_archive(archive, scope, current)
-    active_archive = archive[scope]
-    st.session_state['chat_sessions_v06'][scope] = current
-    # Filters affect only the currently opened conversation, never archive identity.
-    earlier_filter = current.get('_include_demo_filter')
-    if earlier_filter is not None and earlier_filter != show_demo:
-        current['context']['_listing_snapshot_stale'] = True
-        for context_key in ('recent_listings','listing_next_cursor','last_search_query'):
-            current['context'].pop(context_key, None)
-    current['_include_demo_filter'] = show_demo
-    # Cloud chat history remains account-scoped and is never used as a grant.
-    # Older manually saved chats stay readable, even before auto-save is enabled.
-    cloud_owner = verified_owner(actor) if connected and storage_kind() == 'postgres' else None
-    cloud_rows = []
-    cloud_healthy = bool(cloud_owner)
-    chat_consent_key = 'chat_cloud_consent_v0187_' + scope
-    chat_consent_last_key = 'chat_cloud_previous_v0187_' + scope
-    if cloud_owner:
-        try:
-            if chat_consent_key not in st.session_state:
-                enabled = chat_auto_save_enabled(cloud_owner)
-                st.session_state[chat_consent_key] = enabled
-                st.session_state[chat_consent_last_key] = enabled
-        except Exception:
-            cloud_healthy = False
-    if cloud_healthy:
-        st.markdown('<div class="sidebar-chat-save">대화 저장</div>', unsafe_allow_html=True)
-        desired = st.toggle('Supabase에 자동 저장', key=chat_consent_key,
-                            help='동의 후 새 대화부터 자동 저장합니다. 대화 본문과 안전한 도구 요약만 저장해요.')
-        previous = st.session_state.get(chat_consent_last_key, False)
-        if desired != previous:
-            try:
-                set_chat_auto_save(cloud_owner, bool(desired))
-                st.session_state[chat_consent_last_key] = desired
-            except Exception:
-                st.warning('저장 설정을 변경하지 못했어요. 현재 대화는 유지돼요.')
-        # Save only changed messages. Never store pending approval, raw tool
-        # payloads, attachments, refresh tokens or unverified account data.
-        if st.session_state.get(chat_consent_last_key, False) and current.get('turns'):
+                st.caption('AI 대화는 로그인과 사용량 저장소 연결 후 이용할 수 있어요.')
+        # A lightweight capability directory remains discoverable, but no longer
+        # competes with chat history in the permanent navigation.
+        with st.popover('기능 안내'):
+            st.caption('사용 가능한 도구 · {}개'.format(len(TOOL_LABELS)))
+            for tool_key in ('search_listings','recommend_listings','inspect_listing',
+                             'get_buyer_preferences','list_offers','get_handover',
+                             'get_recent_jobs','inspect_attached_zip','prepare_offer'):
+                if tool_key in TOOL_LABELS:
+                    st.caption('· ' + TOOL_LABELS[tool_key])
+            st.caption('거래 승인과 실행은 ProjectAgain 플랫폼에서만 진행돼요.')
+    with chat_panel:
+        owner_scope = login.owner_key[:12] if connected else visitor
+        scope = conversation_scope('live', actor, owner_scope)
+        # Before v0.10, demo-filter switches created separate chat scopes.
+        old_scopes = [scope + '::' + str(show_demo), scope + '::' + str(not show_demo)]
+        current = get_session(scope, old_scopes)
+        # A search filter change must not erase the chat, but old search ordinals
+        # must not accidentally point to a listing excluded by the new filter.
+        previous_filter = current.get("_include_demo_filter")
+        if previous_filter is not None and previous_filter != show_demo:
+            current['context']['_listing_snapshot_stale'] = True
+            for context_key in ("recent_listings", "listing_next_cursor", "last_search_query"):
+                current["context"].pop(context_key, None)
+        current["_include_demo_filter"] = show_demo
+        # v0.17.1 migration: preserve the old live session as the first archived chat.
+        archive = st.session_state.setdefault('conversation_archive_v0172', {})
+        # Always initialize through the archive helper: do not insert a None
+        # placeholder with setdefault(), which crashes on a visitor's first load.
+        # The helper also recovers a None placeholder left by earlier app versions.
+        current = init_archive(archive, scope, current)
+        active_archive = archive[scope]
+        st.session_state['chat_sessions_v06'][scope] = current
+        # Filters affect only the currently opened conversation, never archive identity.
+        earlier_filter = current.get('_include_demo_filter')
+        if earlier_filter is not None and earlier_filter != show_demo:
+            current['context']['_listing_snapshot_stale'] = True
+            for context_key in ('recent_listings','listing_next_cursor','last_search_query'):
+                current['context'].pop(context_key, None)
+        current['_include_demo_filter'] = show_demo
+        # Verified account transcripts save by default. Legacy v0.18.7 saved
+        # opt-out preferences are no longer used, but their table and past records
+        # remain untouched. Anonymous visitors always stay in browser memory.
+        cloud_owner = verified_owner(actor) if connected and storage_kind() == 'postgres' else None
+        cloud_rows = []
+        if cloud_owner and current.get('turns'):
             fingerprint = transcript_fingerprint(current)
             cache_key = 'chat_last_saved_v0187_' + scope + '_' + active_archive['active']
             if st.session_state.get(cache_key) != fingerprint:
@@ -738,187 +732,213 @@ with st.sidebar:
                     st.session_state.pop('chat_cloud_error_v0187_' + scope, None)
                 except Exception:
                     st.session_state['chat_cloud_error_v0187_' + scope] = True
-        if st.session_state.get('chat_cloud_error_v0187_' + scope):
-            st.caption('이 대화는 아직 클라우드에 저장되지 않았어요. 본문은 현재 화면에 유지돼요.')
-        try:
-            cloud_rows = list_conversations(cloud_owner, limit=60)
-        except Exception:
-            st.caption('저장된 대화 목록을 잠시 불러오지 못했어요.')
-    st.markdown('<div class="sidebar-chat-title">대화</div>', unsafe_allow_html=True)
-    if st.button('＋ 새 대화', type='primary', width='stretch', key='chat_new_v0187'):
-        if current.get('pending'):
-            current['pending'] = None
-            plan_for_switch = current['context'].get('workflow')
-            if isinstance(plan_for_switch, dict):
-                for step in plan_for_switch.get('steps', []):
-                    if step.get('status') == 'WAITING_APPROVAL':
-                        step['status'] = 'BLOCKED'
-                        step['note'] = '대화 전환으로 승인 카드 종료 · 플랫폼 상태를 다시 확인하세요'
-                plan_for_switch['status'] = 'PARTIAL'
-        start_conversation(active_archive)
-        st.rerun()
-    chat_rows = visible_conversations(active_archive, cloud_rows, limit=40)
-    if chat_rows:
-        st.markdown('<div class="sidebar-chat-section">최근 대화</div>', unsafe_allow_html=True)
-    for row in chat_rows:
-        cid = row['id']
-        is_active = cid == active_archive['active']
-        with st.container(key='chat_nav_row_v0187_' + cid):
-            choose_col, menu_col = st.columns([6, 1.3], gap='small', vertical_alignment='center')
-            with choose_col:
-                text = ('●  ' if is_active else '   ') + row['title'][:34]
-                if st.button(text, key='chat_select_v0187_' + cid,
-                             disabled=is_active, width='stretch'):
-                    if current.get('pending'):
-                        current['pending'] = None
-                    if cid not in active_archive['items'] and cloud_owner:
-                        try:
-                            loaded = load_conversation(cloud_owner, cid)
-                        except Exception:
-                            loaded = None
-                        if not loaded:
-                            st.warning('저장된 대화를 불러오지 못했어요.')
-                        else:
-                            active_archive['items'][cid] = loaded
-                            active_archive.setdefault('created', {})[cid] = row['updated_at']
-                            st.session_state['archive_restore_notice_v0172'] = True
-                    if cid in active_archive['items']:
-                        open_conversation(active_archive, cid)
-                        st.rerun()
-            with menu_col:
-                if st.button('⋯', key='chat_more_v0187_' + cid, help='대화 관리', width='stretch'):
-                    open_menu = st.session_state.get('chat_actions_open_v0187')
-                    st.session_state['chat_actions_open_v0187'] = None if open_menu == cid else cid
-                    st.rerun()
-            if st.session_state.get('chat_actions_open_v0187') == cid:
-                st.caption('이 대화를 삭제하면 복구할 수 없어요.')
-                confirm_col, cancel_col = st.columns([3, 1.5], gap='small')
-                with confirm_col:
-                    if st.button('대화 삭제 확인', key='chat_delete_v0187_' + cid, width='stretch'):
-                        removal_ok = True
-                        if row['remote'] and cloud_owner:
+        if cloud_owner:
+            try:
+                cloud_rows = list_conversations(cloud_owner, limit=100)
+            except Exception:
+                st.session_state['chat_cloud_error_v0187_' + scope] = True
+        if cloud_owner and st.session_state.get('chat_cloud_error_v0187_' + scope):
+            st.caption('대화 동기화가 일시적으로 지연되고 있어요. 현재 대화는 화면에 남아 있어요.')
+        st.markdown('<div class="sidebar-chat-title">대화</div>', unsafe_allow_html=True)
+        if st.button('＋ 새 대화', type='primary', width='stretch', key='chat_new_v0187'):
+            if current.get('pending'):
+                current['pending'] = None
+                plan_for_switch = current['context'].get('workflow')
+                if isinstance(plan_for_switch, dict):
+                    for step in plan_for_switch.get('steps', []):
+                        if step.get('status') == 'WAITING_APPROVAL':
+                            step['status'] = 'BLOCKED'
+                            step['note'] = '대화 전환으로 승인 카드 종료 · 플랫폼 상태를 다시 확인하세요'
+                    plan_for_switch['status'] = 'PARTIAL'
+            start_conversation(active_archive)
+            st.rerun()
+        search_term = st.text_input('대화 검색', placeholder='대화 제목 검색',
+                                    key='chat_search_v0188', label_visibility='collapsed')
+        chat_rows = search_conversations(visible_conversations(active_archive, cloud_rows, limit=100), search_term)
+        last_group = None
+        if search_term and not chat_rows:
+            st.caption('검색 결과가 없어요.')
+        for row in chat_rows:
+            group = conversation_group(row['updated_at'])
+            if group != last_group:
+                st.markdown('<div class="sidebar-chat-section">{}</div>'.format(group), unsafe_allow_html=True)
+                last_group = group
+            cid = row['id']
+            is_active = cid == active_archive['active']
+            with st.container(key='chat_nav_row_v0187_' + cid):
+                choose_col, menu_col = st.columns([6, 1.3], gap='small', vertical_alignment='center')
+                with choose_col:
+                    text = ('●  ' if is_active else '   ') + row['title'][:34]
+                    if st.button(text, key='chat_select_v0187_' + cid,
+                                 disabled=is_active, width='stretch'):
+                        if current.get('pending'):
+                            current['pending'] = None
+                        if cid not in active_archive['items'] and cloud_owner:
                             try:
-                                delete_conversation(cloud_owner, cid)
+                                loaded = load_conversation(cloud_owner, cid)
                             except Exception:
-                                removal_ok = False
-                                st.warning('클라우드 대화를 삭제하지 못했어요. 대화를 유지했어요.')
-                        if removal_ok:
-                            if cid in active_archive['items']:
-                                remove_conversation(active_archive, cid)
-                            st.session_state.pop('chat_last_saved_v0187_' + scope + '_' + cid, None)
+                                loaded = None
+                            if not loaded:
+                                st.warning('저장된 대화를 불러오지 못했어요.')
+                            else:
+                                active_archive['items'][cid] = loaded
+                                active_archive.setdefault('created', {})[cid] = row['updated_at']
+                                st.session_state['archive_restore_notice_v0172'] = True
+                        if cid in active_archive['items']:
+                            open_conversation(active_archive, cid)
+                            st.rerun()
+                with menu_col:
+                    if st.button('⋯', key='chat_more_v0187_' + cid, help='대화 관리', width='stretch'):
+                        open_menu = st.session_state.get('chat_actions_open_v0187')
+                        st.session_state['chat_actions_open_v0187'] = None if open_menu == cid else cid
+                        st.rerun()
+                if st.session_state.get('chat_actions_open_v0187') == cid:
+                    st.caption('이 대화를 삭제하면 복구할 수 없어요.')
+                    confirm_col, cancel_col = st.columns([3, 1.5], gap='small')
+                    with confirm_col:
+                        if st.button('대화 삭제 확인', key='chat_delete_v0187_' + cid, width='stretch'):
+                            removal_ok = True
+                            if row['remote'] and cloud_owner:
+                                try:
+                                    delete_conversation(cloud_owner, cid)
+                                except Exception:
+                                    removal_ok = False
+                                    st.warning('클라우드 대화를 삭제하지 못했어요. 대화를 유지했어요.')
+                            if removal_ok:
+                                if cid in active_archive['items']:
+                                    remove_conversation(active_archive, cid)
+                                st.session_state.pop('chat_last_saved_v0187_' + scope + '_' + cid, None)
+                                st.session_state['chat_actions_open_v0187'] = None
+                                st.rerun()
+                    with cancel_col:
+                        if st.button('취소', key='chat_cancel_delete_v0187_' + cid, width='stretch'):
                             st.session_state['chat_actions_open_v0187'] = None
                             st.rerun()
-                with cancel_col:
-                    if st.button('취소', key='chat_cancel_delete_v0187_' + cid, width='stretch'):
-                        st.session_state['chat_actions_open_v0187'] = None
-                        st.rerun()
-    if not cloud_owner:
-        st.caption('대화는 현재 브라우저에서만 유지돼요. 계정 연결 후 클라우드 저장을 사용할 수 있어요.')
-    elif not st.session_state.get(chat_consent_last_key, False):
-        st.caption('자동 저장은 꺼져 있어요. 기존에 저장한 대화는 열어볼 수 있어요.')
-    st.markdown('<div class="sidebar-chat-separator"></div>', unsafe_allow_html=True)
-    with st.expander('매물 표시 설정', expanded=False):
-        st.checkbox("시연 매물 포함", value=True, key="include_demo_v10")
-
-    # Opt-in persistence is allowed only after validating the visitor's OWN
-    # ProjectAgain delegation token against /auth/me. No shared Cloud Secrets.
-    current['context'].pop('_persist_owner', None)
-    with st.expander('저장한 조건 · 작업', expanded=False):
-        consent_key = 'remember_workflow_v014_' + scope[-12:]
-        consent = st.checkbox('확인한 조건과 작업 계획 저장', value=False,
-                              disabled=not token, key=consent_key)
-        account_owner = verified_owner(actor) if consent else None
-        if consent and not account_owner:
-            st.warning('ProjectAgain 계정 확인에 실패해 저장하지 않았어요.')
-        if account_owner:
-            health = storage_health()
-            if not health['ready']:
-                st.error('기억 저장소 연결 실패 · 대화 내 작업은 계속할 수 있지만 영구 저장은 이용할 수 없어.')
-                account_owner = None
-        if account_owner:
-            current['context']['_persist_owner'] = account_owner
-            st.caption('저장소: ' + ('외부 PostgreSQL' if storage_kind() == 'postgres' else '앱 로컬 SQLite'))
-            if storage_kind() == 'sqlite':
-                st.warning('이 저장은 일시적이야. Streamlit Cloud 재배포 후 작업을 복원하려면 외부 PostgreSQL을 연결해 줘.')
-            profile = current['context'].get('last_recommendation_profile')
-            if profile and st.button('현재 확인된 구매 조건 저장', key='save_profile_v014'):
-                try:
-                    save_preferences(account_owner, profile)
-                    st.success('확인된 구매 조건만 저장했어.')
-                except Exception:
-                    st.error('조건을 저장하지 못했어. 저장소 상태를 확인해 줘.')
-            cols = st.columns(2)
-            with cols[0]:
-                if st.button('조건 불러오기', key='load_profile_v014'):
-                    try:
-                        saved = load_preferences(account_owner)
-                        if saved:
-                            current['context']['last_recommendation_profile'] = saved
-                            st.success('구매 조건을 불러왔어. 새 추천에서 재사용을 요청할 수 있어.')
+        if not cloud_owner:
+            st.caption('로그인 전 대화는 현재 브라우저에서만 유지돼요.')
+        else:
+            st.caption('대화는 계정에 자동 저장돼요. 언제든 삭제할 수 있어요.')
+            with st.popover('대화 관리'):
+                st.caption('대화 기록만 삭제해요. 구매 조건·작업 계획·계정 정보는 삭제하지 않아요.')
+                if st.button('전체 대화 삭제', key='chat_delete_all_ask_v0188', width='stretch'):
+                    st.session_state['chat_delete_all_confirm_v0188_' + scope] = True
+                if st.session_state.get('chat_delete_all_confirm_v0188_' + scope):
+                    st.warning('저장된 대화와 현재 브라우저 대화를 모두 삭제해요. 복구할 수 없어요.')
+                    if st.button('전체 삭제 확인', key='chat_delete_all_confirm_v0188', width='stretch'):
+                        try:
+                            delete_all_conversations(cloud_owner)
+                        except Exception:
+                            st.error('대화 삭제에 실패했어요. 기록을 유지했어요.')
                         else:
-                            st.info('저장된 조건이 없어.')
-                    except Exception:
-                        st.error('구매 조건을 불러오지 못했어.')
-            with cols[1]:
-                if st.button('조건 삭제', key='delete_profile_v014'):
-                    try:
-                        delete_preferences(account_owner)
-                        st.success('저장된 조건을 삭제했어.')
-                    except Exception:
-                        st.error('저장된 조건 삭제에 실패했어.')
-            try:
-                saved_plans = list_workflows(account_owner, limit=5)
-            except Exception:
-                saved_plans = []
-                st.error('저장소 연결을 확인할 수 없어.')
-            if saved_plans:
-                st.caption('저장된 작업 계획')
-            for saved in saved_plans:
-                with st.container():
-                    st.caption(saved['goal'][:55] + ' · ' + str(saved['status']))
-                    restore_col, delete_col = st.columns(2)
-                    with restore_col:
-                        if st.button('복원', key='restore_plan_'+saved['id']):
-                            try:
-                                restored = load_workflow(account_owner, saved['id'])
-                                if restored:
-                                    current['context']['workflow'] = restored
-                                    current['context']['recent_listings'] = [
-                                        {'id': r['listing_id'], 'title': r['title']}
-                                        for r in restored.get('ranked') or []]
-                                    if restored.get('recommendation_criteria'):
-                                        if restored.get('status') == 'WAITING_INPUT':
-                                            current['context']['recommendation_intake'] = {
-                                                'profile': dict(restored['recommendation_criteria']), 'waiting': ''}
-                                        else:
-                                            current['context']['last_recommendation_profile'] = restored['recommendation_criteria']
-                                    elif restored.get('status') == 'WAITING_INPUT':
-                                        current['context']['recommendation_intake'] = {'profile': {}, 'waiting': ''}
-                                    st.rerun()
-                            except Exception:
-                                st.error('작업 계획을 복원하지 못했어.')
-                    with delete_col:
-                        if st.button('삭제', key='delete_plan_'+saved['id']):
-                            try:
-                                delete_workflow(account_owner, saved['id'])
-                                st.rerun()
-                            except Exception:
-                                st.error('저장된 작업 계획을 삭제하지 못했어.')
-        elif not consent:
-            st.caption('계정 연결 후 저장에 동의하면 확인된 조건과 작업 계획을 불러올 수 있어요. 기본값은 저장 안 함.')
-    uploaded = None
-    if token:
-        with st.expander("ZIP 검사 · 도구", expanded=False):
-            uploaded = st.file_uploader("본인 매물의 ZIP 파일", type=["zip"], help="4MB 이하 · 서버에서 실행하지 않고 정적 검사합니다. 플랫폼에 업로드하지 않습니다.")
+                            active_archive['items'].clear()
+                            active_archive['created'].clear()
+                            start_conversation(active_archive)
+                            st.session_state['chat_sessions_v06'][scope] = active_archive['items'][active_archive['active']]
+                            # Invalidate all cached save fingerprints for this account.
+                            prefix = 'chat_last_saved_v0187_' + scope + '_'
+                            for k in tuple(st.session_state.keys()):
+                                if isinstance(k, str) and k.startswith(prefix):
+                                    st.session_state.pop(k, None)
+                            st.session_state['chat_delete_all_confirm_v0188_' + scope] = False
+                            st.session_state['chat_actions_open_v0187'] = None
+                            st.rerun()
+                    if st.button('삭제 취소', key='chat_delete_all_cancel_v0188', width='stretch'):
+                        st.session_state['chat_delete_all_confirm_v0188_' + scope] = False
+                        st.rerun()
+        st.markdown('<div class="sidebar-chat-separator"></div>', unsafe_allow_html=True)
+        with st.expander('매물 표시 설정', expanded=False):
+            st.checkbox("시연 매물 포함", value=True, key="include_demo_v10")
 
-    # Discoverability without a permanent nine-item sidebar menu.
-    with st.popover('사용 가능한 도구 · {}개'.format(len(TOOL_LABELS))):
-        for key in ('search_listings','recommend_listings','inspect_listing',
-                    'get_buyer_preferences','list_offers','get_handover','get_recent_jobs',
-                    'inspect_attached_zip','prepare_offer'):
-            if key in TOOL_LABELS:
-                st.caption('· ' + TOOL_LABELS[key])
-        st.caption('실거래 승인·실행은 ProjectAgain 플랫폼에서만 가능해요.')
+        # Opt-in persistence is allowed only after validating the visitor's OWN
+        # ProjectAgain delegation token against /auth/me. No shared Cloud Secrets.
+        current['context'].pop('_persist_owner', None)
+        with st.expander('저장한 조건 · 작업', expanded=False):
+            consent_key = 'remember_workflow_v014_' + scope[-12:]
+            consent = st.checkbox('확인한 조건과 작업 계획 저장', value=False,
+                                  disabled=not token, key=consent_key)
+            account_owner = verified_owner(actor) if consent else None
+            if consent and not account_owner:
+                st.warning('ProjectAgain 계정 확인에 실패해 저장하지 않았어요.')
+            if account_owner:
+                health = storage_health()
+                if not health['ready']:
+                    st.error('기억 저장소 연결 실패 · 대화 내 작업은 계속할 수 있지만 영구 저장은 이용할 수 없어.')
+                    account_owner = None
+            if account_owner:
+                current['context']['_persist_owner'] = account_owner
+                st.caption('저장소: ' + ('외부 PostgreSQL' if storage_kind() == 'postgres' else '앱 로컬 SQLite'))
+                if storage_kind() == 'sqlite':
+                    st.warning('이 저장은 일시적이야. Streamlit Cloud 재배포 후 작업을 복원하려면 외부 PostgreSQL을 연결해 줘.')
+                profile = current['context'].get('last_recommendation_profile')
+                if profile and st.button('현재 확인된 구매 조건 저장', key='save_profile_v014'):
+                    try:
+                        save_preferences(account_owner, profile)
+                        st.success('확인된 구매 조건만 저장했어.')
+                    except Exception:
+                        st.error('조건을 저장하지 못했어. 저장소 상태를 확인해 줘.')
+                cols = st.columns(2)
+                with cols[0]:
+                    if st.button('조건 불러오기', key='load_profile_v014'):
+                        try:
+                            saved = load_preferences(account_owner)
+                            if saved:
+                                current['context']['last_recommendation_profile'] = saved
+                                st.success('구매 조건을 불러왔어. 새 추천에서 재사용을 요청할 수 있어.')
+                            else:
+                                st.info('저장된 조건이 없어.')
+                        except Exception:
+                            st.error('구매 조건을 불러오지 못했어.')
+                with cols[1]:
+                    if st.button('조건 삭제', key='delete_profile_v014'):
+                        try:
+                            delete_preferences(account_owner)
+                            st.success('저장된 조건을 삭제했어.')
+                        except Exception:
+                            st.error('저장된 조건 삭제에 실패했어.')
+                try:
+                    saved_plans = list_workflows(account_owner, limit=5)
+                except Exception:
+                    saved_plans = []
+                    st.error('저장소 연결을 확인할 수 없어.')
+                if saved_plans:
+                    st.caption('저장된 작업 계획')
+                for saved in saved_plans:
+                    with st.container():
+                        st.caption(saved['goal'][:55] + ' · ' + str(saved['status']))
+                        restore_col, delete_col = st.columns(2)
+                        with restore_col:
+                            if st.button('복원', key='restore_plan_'+saved['id']):
+                                try:
+                                    restored = load_workflow(account_owner, saved['id'])
+                                    if restored:
+                                        current['context']['workflow'] = restored
+                                        current['context']['recent_listings'] = [
+                                            {'id': r['listing_id'], 'title': r['title']}
+                                            for r in restored.get('ranked') or []]
+                                        if restored.get('recommendation_criteria'):
+                                            if restored.get('status') == 'WAITING_INPUT':
+                                                current['context']['recommendation_intake'] = {
+                                                    'profile': dict(restored['recommendation_criteria']), 'waiting': ''}
+                                            else:
+                                                current['context']['last_recommendation_profile'] = restored['recommendation_criteria']
+                                        elif restored.get('status') == 'WAITING_INPUT':
+                                            current['context']['recommendation_intake'] = {'profile': {}, 'waiting': ''}
+                                        st.rerun()
+                                except Exception:
+                                    st.error('작업 계획을 복원하지 못했어.')
+                        with delete_col:
+                            if st.button('삭제', key='delete_plan_'+saved['id']):
+                                try:
+                                    delete_workflow(account_owner, saved['id'])
+                                    st.rerun()
+                                except Exception:
+                                    st.error('저장된 작업 계획을 삭제하지 못했어.')
+            elif not consent:
+                st.caption('계정 연결 후 저장에 동의하면 확인된 조건과 작업 계획을 불러올 수 있어요. 기본값은 저장 안 함.')
+        uploaded = None
+        if token:
+            with st.expander("ZIP 검사 · 도구", expanded=False):
+                uploaded = st.file_uploader("본인 매물의 ZIP 파일", type=["zip"], help="4MB 이하 · 서버에서 실행하지 않고 정적 검사합니다. 플랫폼에 업로드하지 않습니다.")
 
 # ── Main: state-aware project workbench (results first; transcript on demand). ──
 online = ENABLE_OPENAI_CHAT and bool(OPENAI_API_KEY) and bool(ai_identity)
@@ -944,36 +964,34 @@ if workbench['focus'] != 'welcome':
     with st.container(key='primary_workbench_v0173'):
         render_primary_workspace(workbench, session, actor)
 
+welcome_input = None
 if not session["turns"]:
-    # The empty chat state is the product's primary entry point: one clear question,
-    # followed by four real tool-entry actions. Keep business logic below unchanged.
+    # Prompt is the primary action; use native Streamlit chat input inline in
+    # the welcome panel instead of a second fixed bar at the bottom.
     st.markdown('''<section class="welcome" aria-labelledby="welcome-title">
         <div class="welcome-eyebrow"><span class="welcome-rule" aria-hidden="true"></span>PROJECTAGAIN / AI DESK</div>
-        <h1 class="welcome-title" id="welcome-title">어떤 프로젝트를<br>찾고 계신가요?</h1>
-        <p class="welcome-description">원하는 조건을 알려주세요. 매물 탐색부터 비교·검토까지 함께 정리해 드려요.</p>
+        <h1 class="welcome-title" id="welcome-title">어떤 프로젝트를 찾고 계신가요?</h1>
+        <p class="welcome-description">조건을 편하게 말씀해 주세요. 매물을 찾고, 비교하고, 인수 전 확인할 점까지 정리해 드릴게요.</p>
         </section>''', unsafe_allow_html=True)
+    with st.container(key='welcome_input_v0188'):
+        welcome_input = st.chat_input('예: 50만원 이하 Python 프로젝트를 추천해줘',
+                                      max_chars=2000, key='welcome_chat_input_v0188')
     examples = [
-        ("01", "매물 둘러보기", "등록된 프로젝트부터 살펴보기", "현재 등록된 매물 목록 보여줘"),
-        ("02", "맞춤 추천 받기", "필요한 조건을 물어보고 적합한 후보 선별", "나에게 맞는 프로젝트 추천해줘"),
-        ("03", "실사 준비하기", "인수 전 검토 항목과 필요한 자료 먼저 확인", "프로젝트를 인수하기 전 실사에서 어떤 위험과 자료를 확인해야 하는지 알려줘. 매물을 고른 뒤 검토할게"),
-        ("04", "작업 내역 확인", "이전에 진행한 작업 다시 보기", "최근 작업 기록 보여줘"),
+        ('01', '매물 둘러보기', '등록된 프로젝트를 확인해요', '현재 등록된 매물 목록 보여줘'),
+        ('02', '맞춤 추천', '내 조건에 맞는 후보를 찾아요', '나에게 맞는 프로젝트 추천해줘'),
+        ('03', '인수 전 검토', '위험과 필요한 자료를 살펴봐요', '프로젝트를 인수하기 전 실사에서 어떤 위험과 자료를 확인해야 하는지 알려줘. 매물을 고른 뒤 검토할게'),
+        ('04', '이전 작업', '진행했던 작업을 확인해요', '최근 작업 기록 보여줘'),
     ]
     with st.container(key="welcome_actions"):
-        st.markdown('''<div class="welcome-actions-heading">
-           <span class="welcome-actions-title">바로 시작하기</span>
-           <span class="welcome-actions-count">4가지 시작 방법</span>
-           </div>''', unsafe_allow_html=True)
-        # Use one pair of columns per row. Mobile stacking keeps the reading
-        # and keyboard order 01 -> 02 -> 03 -> 04, including screen readers.
+        st.markdown('<div class="welcome-actions-heading"><span class="welcome-actions-title">바로 시작하기</span></div>', unsafe_allow_html=True)
         for start in (0, 2):
-            columns = st.columns(2, gap="large")
+            columns = st.columns(2, gap='small')
             for offset, column in enumerate(columns):
-                index = start + offset
-                number, title, hint, prompt = examples[index]
+                idx = start + offset
+                number, title, hint, prompt = examples[idx]
                 with column:
-                    with st.container(key='welcome_tile_' + str(index)):
-                        st.markdown('<div class="suggestion-index">{}</div>'.format(number), unsafe_allow_html=True)
-                        if st.button(title, width="stretch", key="welcome_" + str(index)):
+                    with st.container(key='welcome_tile_' + str(idx)):
+                        if st.button(title, width="stretch", key='welcome_' + str(idx)):
                             pending_prompt = prompt
                         st.markdown('<p class="suggestion-hint">{}</p>'.format(escape(hint)), unsafe_allow_html=True)
 
@@ -1076,7 +1094,8 @@ input_hint = {
     'offer':'제안 내용과 확인이 필요한 조건을 질문할 수 있어요',
     'workflow':'부족한 정보를 알려주거나 작업을 이어가세요',
 }.get(workbench['focus'], '프로젝트에 관해 질문해 주세요')
-submitted_text = st.chat_input(input_hint, max_chars=2000)
+submitted_text = (st.chat_input(input_hint, max_chars=2000)
+                  if session["turns"] else welcome_input)
 submitted = submitted_text or pending_prompt
 if submitted:
     if len(submitted) > 2000:
