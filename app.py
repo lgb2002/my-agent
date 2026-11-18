@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env", override=False)
 # Bridge Streamlit Cloud top-level TOML Secrets before core.config is imported.
 # Never render, log or expose secret values.
-from core.runtime_secrets import configure_from_secrets, ai_activation_reason
+from core.runtime_secrets import configure_from_secrets
 try:
     configure_from_secrets(st.secrets)
 except Exception:
@@ -26,22 +26,21 @@ except Exception:
 from agent.chat import ChatAgent  # noqa: E402
 from agent.core import AgentError, AgentRuntime  # noqa: E402
 from agent.tools import TOOL_LABELS  # noqa: E402
-from core.config import ENABLE_OPENAI_CHAT, OPENAI_API_KEY, OPENAI_MODEL, SHOW_DEVELOPER_TOOLS, ENABLE_LIVE_DRAFTS, marketplace_config_error  # noqa: E402
+from core.config import ENABLE_OPENAI_CHAT, OPENAI_API_KEY, ENABLE_LIVE_DRAFTS, marketplace_config_error  # noqa: E402
 from core.request_context import (set_request_context, set_broker_refresh_handler,
     set_broker_access_handler, set_current_access_token)  # noqa: E402
 from core.oidc_session import resolve_login, revoke_access, _fetch_identity  # noqa: E402
 from core.oauth_broker import (BrokerStore,BrokerClient,BrokerError,BrokerReauth,
     _browser_identity,new_intent,resolve_broker,BROKER_SCOPE)  # noqa: E402
-from core.broker_storage_diagnostics import diagnose_broker_storage  # noqa: E402
 from core.marketplace_client import origin_only  # noqa: E402
 from core.ai_usage import set_ai_identity, usage_snapshot, storage_kind as ai_usage_storage_kind  # noqa: E402
 from core.llm_service import contains_obvious_secret  # noqa: E402
 from core.config import MARKETPLACE_BASE_URL  # noqa: E402
-from core.live_diagnostics import run_diagnostics  # noqa: E402
 from core.chat_sessions import (conversation_scope, get_or_migrate_session, append_turn,
-    init_archive, start_conversation, open_conversation, remove_conversation, conversation_list, conversation_title)  # noqa: E402
+    init_archive, start_conversation, open_conversation, remove_conversation)  # noqa: E402
 from core.chat_archive_store import (save_conversation, list_conversations, load_conversation,
-    delete_conversation)  # noqa: E402
+    delete_conversation, chat_auto_save_enabled, set_chat_auto_save)  # noqa: E402
+from core.chat_navigation import visible_conversations, transcript_fingerprint  # noqa: E402
 from core.ux_actions import suggested_actions, friendly_state, tool_result_label, request_requires_account  # noqa: E402
 from core.workflow_store import (verified_owner, save_preferences, load_preferences,
     delete_preferences, list_workflows, load_workflow, delete_workflow, storage_kind, storage_health)  # noqa: E402
@@ -416,10 +415,9 @@ def render_primary_workspace(view, session, actor):
         st.caption('계정별 조회 결과 · 현재 조회에서 반환된 정보 기준')
         st.markdown(str(view['event'].get('summary') or '조회 결과 확인')[:250])
     elif focus == 'conversation':
-        if view['last_assistant']:
-            st.markdown(view['last_assistant'])
-        else:
-            st.caption('아래 입력창에서 이어서 질문해 주세요.')
+        # v0.18.7: transcript is visible below for ordinary conversations.
+        # Do not duplicate the last answer as a separate workbench block.
+        st.caption('대화를 이어가거나 왼쪽에서 다른 대화를 열 수 있어요.')
         earlier = view.get('previous_result')
         if earlier and view['data']:
             title = {'recommend':'앞서 추천한 후보 다시 보기', 'search':'앞서 조회한 매물 다시 보기',
@@ -586,38 +584,6 @@ def broker_connect_ui(platform_origin, native_configured):
         except BrokerError as exc:
             st.warning('권한 연결을 준비하지 못했어요. 연결 설정과 플랫폼 상태를 확인해 주세요.')
             storage_diagnosis_needed = exc.code == 'storage_unavailable'
-    if storage_diagnosis_needed:
-        with st.expander('로그인 저장소 오류 진단', expanded=False):
-            st.caption('진단을 실행하면 DB에 읽기 전용 쿼리를 보냅니다. 연결 주소·계정·비밀번호·원본 예외는 표시하거나 기록하지 않습니다.')
-            if st.button('DB 연결 진단 실행', key='broker_storage_diagnose_v0185', width='stretch'):
-                now=time.monotonic()
-                last=float(st.session_state.get('broker_storage_diagnose_at_v0185',-99999))
-                if now-last<30:
-                    st.info('연결 진단은 30초 후 다시 실행할 수 있어요.')
-                else:
-                    st.session_state['broker_storage_diagnose_at_v0185']=now
-                    try:
-                        secret_url=st.secrets.get('AGENT_STATE_DATABASE_URL',None)
-                    except (KeyError,AttributeError,TypeError):
-                        secret_url=None
-                    report=diagnose_broker_storage(db_url, secret_url=secret_url)
-                    st.markdown('**진단 결과 · {}**'.format(report['status']))
-                    st.caption('확인 단계 · {} / 분류 · {}'.format(report['stage'],report['category']))
-                    if report['sqlstate']:
-                        st.caption('PostgreSQL SQLSTATE · '+report['sqlstate'])
-                    if report.get('exception_type'):
-                        st.caption('드라이버 오류 종류 · '+report['exception_type'])
-                    if report.get('uri_libpq') != '미검사':
-                        st.caption('PostgreSQL 연결 문자열 해석 · '+report['uri_libpq'])
-                    if report.get('dns_lookup') != '미검사':
-                        st.caption('DNS 조회 · '+report['dns_lookup'])
-                    if report.get('tcp_connect') != '미검사':
-                        st.caption('TCP 포트 접속 · '+report['tcp_connect'])
-                    if report['environment_override_differs']:
-                        st.warning('실행 환경변수와 Streamlit Secrets의 DB 주소가 다릅니다. 실행 환경변수가 우선 적용되고 있어요.')
-                    if report['schema_create'] is False:
-                        st.warning('테이블 생성 권한이 확인되지 않았어요.')
-                    st.info(report['advice'])
     if st.button('다른 계정으로 로그인',key='broker_switch_account',width='stretch'):
         st.logout()
     return None,None
@@ -630,9 +596,9 @@ with st.sidebar:
                 unsafe_allow_html=True)
 
     actor = "ProjectAgain 사용자"
-    st.markdown('<div class="sidebar-heading">매물 보기</div>', unsafe_allow_html=True)
     # Platform-registered demo listings are a normal API filter, NOT a local sandbox.
-    show_demo = st.checkbox("시연 매물 포함", value=True, key="include_demo_v10")
+    # Widget state is updated before the rerun; render it in secondary settings.
+    show_demo = bool(st.session_state.get('include_demo_v10', True))
     # Native OIDC handles redirect/state/nonce/PKCE. Only a platform-validated
     # API access token may enable personalized features or paid model calls.
     # Never use a manually pasted grant, a shared secret, or unverified OIDC sub.
@@ -734,10 +700,130 @@ with st.sidebar:
         for context_key in ('recent_listings','listing_next_cursor','last_search_query'):
             current['context'].pop(context_key, None)
     current['_include_demo_filter'] = show_demo
+    # Cloud chat history remains account-scoped and is never used as a grant.
+    # Older manually saved chats stay readable, even before auto-save is enabled.
+    cloud_owner = verified_owner(actor) if connected and storage_kind() == 'postgres' else None
+    cloud_rows = []
+    cloud_healthy = bool(cloud_owner)
+    chat_consent_key = 'chat_cloud_consent_v0187_' + scope
+    chat_consent_last_key = 'chat_cloud_previous_v0187_' + scope
+    if cloud_owner:
+        try:
+            if chat_consent_key not in st.session_state:
+                enabled = chat_auto_save_enabled(cloud_owner)
+                st.session_state[chat_consent_key] = enabled
+                st.session_state[chat_consent_last_key] = enabled
+        except Exception:
+            cloud_healthy = False
+    if cloud_healthy:
+        st.markdown('<div class="sidebar-chat-save">대화 저장</div>', unsafe_allow_html=True)
+        desired = st.toggle('Supabase에 자동 저장', key=chat_consent_key,
+                            help='동의 후 새 대화부터 자동 저장합니다. 대화 본문과 안전한 도구 요약만 저장해요.')
+        previous = st.session_state.get(chat_consent_last_key, False)
+        if desired != previous:
+            try:
+                set_chat_auto_save(cloud_owner, bool(desired))
+                st.session_state[chat_consent_last_key] = desired
+            except Exception:
+                st.warning('저장 설정을 변경하지 못했어요. 현재 대화는 유지돼요.')
+        # Save only changed messages. Never store pending approval, raw tool
+        # payloads, attachments, refresh tokens or unverified account data.
+        if st.session_state.get(chat_consent_last_key, False) and current.get('turns'):
+            fingerprint = transcript_fingerprint(current)
+            cache_key = 'chat_last_saved_v0187_' + scope + '_' + active_archive['active']
+            if st.session_state.get(cache_key) != fingerprint:
+                try:
+                    save_conversation(cloud_owner, active_archive['active'], current)
+                    st.session_state[cache_key] = fingerprint
+                    st.session_state.pop('chat_cloud_error_v0187_' + scope, None)
+                except Exception:
+                    st.session_state['chat_cloud_error_v0187_' + scope] = True
+        if st.session_state.get('chat_cloud_error_v0187_' + scope):
+            st.caption('이 대화는 아직 클라우드에 저장되지 않았어요. 본문은 현재 화면에 유지돼요.')
+        try:
+            cloud_rows = list_conversations(cloud_owner, limit=60)
+        except Exception:
+            st.caption('저장된 대화 목록을 잠시 불러오지 못했어요.')
+    st.markdown('<div class="sidebar-chat-title">대화</div>', unsafe_allow_html=True)
+    if st.button('＋ 새 대화', type='primary', width='stretch', key='chat_new_v0187'):
+        if current.get('pending'):
+            current['pending'] = None
+            plan_for_switch = current['context'].get('workflow')
+            if isinstance(plan_for_switch, dict):
+                for step in plan_for_switch.get('steps', []):
+                    if step.get('status') == 'WAITING_APPROVAL':
+                        step['status'] = 'BLOCKED'
+                        step['note'] = '대화 전환으로 승인 카드 종료 · 플랫폼 상태를 다시 확인하세요'
+                plan_for_switch['status'] = 'PARTIAL'
+        start_conversation(active_archive)
+        st.rerun()
+    chat_rows = visible_conversations(active_archive, cloud_rows, limit=40)
+    if chat_rows:
+        st.markdown('<div class="sidebar-chat-section">최근 대화</div>', unsafe_allow_html=True)
+    for row in chat_rows:
+        cid = row['id']
+        is_active = cid == active_archive['active']
+        with st.container(key='chat_nav_row_v0187_' + cid):
+            choose_col, menu_col = st.columns([6, 1.3], gap='small', vertical_alignment='center')
+            with choose_col:
+                text = ('●  ' if is_active else '   ') + row['title'][:34]
+                if st.button(text, key='chat_select_v0187_' + cid,
+                             disabled=is_active, width='stretch'):
+                    if current.get('pending'):
+                        current['pending'] = None
+                    if cid not in active_archive['items'] and cloud_owner:
+                        try:
+                            loaded = load_conversation(cloud_owner, cid)
+                        except Exception:
+                            loaded = None
+                        if not loaded:
+                            st.warning('저장된 대화를 불러오지 못했어요.')
+                        else:
+                            active_archive['items'][cid] = loaded
+                            active_archive.setdefault('created', {})[cid] = row['updated_at']
+                            st.session_state['archive_restore_notice_v0172'] = True
+                    if cid in active_archive['items']:
+                        open_conversation(active_archive, cid)
+                        st.rerun()
+            with menu_col:
+                if st.button('⋯', key='chat_more_v0187_' + cid, help='대화 관리', width='stretch'):
+                    open_menu = st.session_state.get('chat_actions_open_v0187')
+                    st.session_state['chat_actions_open_v0187'] = None if open_menu == cid else cid
+                    st.rerun()
+            if st.session_state.get('chat_actions_open_v0187') == cid:
+                st.caption('이 대화를 삭제하면 복구할 수 없어요.')
+                confirm_col, cancel_col = st.columns([3, 1.5], gap='small')
+                with confirm_col:
+                    if st.button('대화 삭제 확인', key='chat_delete_v0187_' + cid, width='stretch'):
+                        removal_ok = True
+                        if row['remote'] and cloud_owner:
+                            try:
+                                delete_conversation(cloud_owner, cid)
+                            except Exception:
+                                removal_ok = False
+                                st.warning('클라우드 대화를 삭제하지 못했어요. 대화를 유지했어요.')
+                        if removal_ok:
+                            if cid in active_archive['items']:
+                                remove_conversation(active_archive, cid)
+                            st.session_state.pop('chat_last_saved_v0187_' + scope + '_' + cid, None)
+                            st.session_state['chat_actions_open_v0187'] = None
+                            st.rerun()
+                with cancel_col:
+                    if st.button('취소', key='chat_cancel_delete_v0187_' + cid, width='stretch'):
+                        st.session_state['chat_actions_open_v0187'] = None
+                        st.rerun()
+    if not cloud_owner:
+        st.caption('대화는 현재 브라우저에서만 유지돼요. 계정 연결 후 클라우드 저장을 사용할 수 있어요.')
+    elif not st.session_state.get(chat_consent_last_key, False):
+        st.caption('자동 저장은 꺼져 있어요. 기존에 저장한 대화는 열어볼 수 있어요.')
+    st.markdown('<div class="sidebar-chat-separator"></div>', unsafe_allow_html=True)
+    with st.expander('매물 표시 설정', expanded=False):
+        st.checkbox("시연 매물 포함", value=True, key="include_demo_v10")
+
     # Opt-in persistence is allowed only after validating the visitor's OWN
     # ProjectAgain delegation token against /auth/me. No shared Cloud Secrets.
     current['context'].pop('_persist_owner', None)
-    with st.expander('내 작업 · 기억', expanded=False):
+    with st.expander('저장한 조건 · 작업', expanded=False):
         consent_key = 'remember_workflow_v014_' + scope[-12:]
         consent = st.checkbox('확인한 조건과 작업 계획 저장', value=False,
                               disabled=not token, key=consent_key)
@@ -820,186 +906,19 @@ with st.sidebar:
                                 st.error('저장된 작업 계획을 삭제하지 못했어.')
         elif not consent:
             st.caption('계정 연결 후 저장에 동의하면 확인된 조건과 작업 계획을 불러올 수 있어요. 기본값은 저장 안 함.')
-    # Existing chats remain reachable; only the active ID changes.
-    if st.button("＋ 새 대화", type="primary", width="stretch"):
-        if current.get('pending'):
-            current['pending'] = None  # pending nonces are never transferred
-            plan_for_switch = current['context'].get('workflow')
-            if isinstance(plan_for_switch, dict):
-                for step in plan_for_switch.get('steps', []):
-                    if step.get('status') == 'WAITING_APPROVAL':
-                        step['status'] = 'BLOCKED'
-                        step['note'] = '대화 전환으로 승인 카드 종료 · 플랫폼 상태를 다시 확인하세요'
-                plan_for_switch['status'] = 'PARTIAL'
-        start_conversation(active_archive)
-        st.rerun()
-    with st.expander('대화 보관함 · {}개'.format(len(active_archive['items'])), expanded=False):
-        st.caption('이 브라우저 세션에서 나눈 대화예요. 저장 동의 없이는 재접속 후 유지되지 않을 수 있어요.')
-        for cid, title, _ in conversation_list(active_archive)[:30]:
-            is_active = cid == active_archive['active']
-            c1, c2 = st.columns([4,1], gap='small')
-            with c1:
-                if st.button(('● ' if is_active else '') + title[:32], key='open_chat_'+cid,
-                             disabled=is_active, width='stretch'):
-                    if current.get('pending'):
-                        current['pending'] = None
-                    open_conversation(active_archive, cid)
-                    st.rerun()
-            with c2:
-                if st.button('삭제', key='remove_chat_'+cid, width='stretch'):
-                    remove_conversation(active_archive, cid)
-                    st.rerun()
-        st.caption('대화를 삭제하면 이 브라우저 보관함에서 지워져요. 계정에 별도로 저장한 대화는 따로 삭제해야 해요.')
-    with st.expander('대화 장기 보관', expanded=False):
-        archive_consent_key = 'conversation_consent_v0172_' + scope[-12:]
-        archive_consent = st.checkbox('필요한 대화를 직접 계정 저장소에 보관하는 데 동의',
-                                     value=False, disabled=not token, key=archive_consent_key)
-        archive_owner = verified_owner(actor) if archive_consent else None
-        if archive_consent and not archive_owner:
-            st.warning('ProjectAgain 계정이 확인되지 않아 저장할 수 없어요.')
-        if archive_owner:
-            st.caption('저장 버튼을 누를 때만 외부 저장소에 대화 문장과 도구 요약을 보관해요. 승인 카드·원본 API 응답은 제외하며, 민감한 내용은 저장하지 않는 것이 좋아요.')
-            if storage_kind() == 'sqlite':
-                st.warning('현재 로컬 저장소는 Cloud 재배포 후 사라질 수 있어요. PostgreSQL 연결을 추천해요.')
-            if st.button('현재 대화 계정에 저장', key='save_chat_v0172', width='stretch'):
-                try:
-                    save_conversation(archive_owner, active_archive['active'], current)
-                    st.success('현재 대화를 계정별 보관함에 저장했어요.')
-                except Exception:
-                    st.error('대화 보관에 실패했어요. 저장소 상태 또는 대화 속 비밀정보를 확인해 주세요.')
-            try:
-                remote_chats = list_conversations(archive_owner, limit=20)
-            except Exception:
-                remote_chats = []
-                st.error('계정 대화 보관함을 읽지 못했어요.')
-            for remote_chat in remote_chats:
-                rid = remote_chat['id']
-                st.caption(remote_chat['title'])
-                load_col, del_col = st.columns(2)
-                with load_col:
-                    if st.button('불러오기', key='load_chat_v0172_'+rid, width='stretch'):
-                        try:
-                            loaded = load_conversation(archive_owner, rid)
-                            if loaded:
-                                active_archive['items'][rid] = loaded
-                                active_archive['created'][rid] = remote_chat['updated_at']
-                                open_conversation(active_archive, rid)
-                                st.session_state['archive_restore_notice_v0172'] = True
-                                st.rerun()
-                        except Exception:
-                            st.error('대화를 불러오지 못했어요.')
-                with del_col:
-                    if st.button('영구 삭제', key='del_chat_v0172_'+rid, width='stretch'):
-                        try:
-                            delete_conversation(archive_owner, rid)
-                            st.rerun()
-                        except Exception:
-                            st.error('대화를 삭제하지 못했어요.')
-        else:
-            st.caption('브라우저를 떠나도 대화를 보관하려면 본인 계정 연결과 저장 동의가 필요해요.')
-
-    current_profile = (current['context'].get('recommendation_intake') or {}).get('profile') or current['context'].get('last_recommendation_profile') or {}
-    with st.expander('추천 조건 확인·수정' + (' · 설정됨' if current_profile else ''), expanded=False):
-        if not current_profile:
-            st.caption('맞춤 추천에서 구매 조건을 알려주면 여기에 표시돼요. 조건은 대화로도 수정할 수 있어요.')
-        else:
-            labels = {'NONE':'입문','BASIC':'초급','INTERMEDIATE':'중급','ADVANCED':'고급',
-                      'LOW':'낮음','MEDIUM':'보통','HIGH':'높음'}
-            st.caption('현재 대화에 적용할 조건 · ' + str(current_profile.get('objective') or '목적 미확인')[:65])
-            with st.form('edit_recommendation_v0172_'+active_archive['active']):
-                objective_text = st.text_input('구매 목적', value=str(current_profile.get('objective') or '')[:120], max_chars=120)
-                budget_amount = st.number_input('구매 예산 상한 (원)', min_value=0, max_value=1_000_000_000,
-                    step=10_000, value=int(current_profile.get('max_budget_krw') or 0))
-                skills = ['', 'NONE','BASIC','INTERMEDIATE','ADVANCED']
-                risks = ['', 'LOW','MEDIUM','HIGH']
-                existing_skill = str(current_profile.get('skill_level') or '')
-                existing_risk = str(current_profile.get('risk_tolerance') or '')
-                skill_pick = st.selectbox('개발 수준', options=skills,
-                    format_func=lambda x: labels.get(x,'선택하지 않음'),
-                    index=skills.index(existing_skill) if existing_skill in skills else 0)
-                risk_pick = st.selectbox('위험 허용도', options=risks,
-                    format_func=lambda x: labels.get(x,'선택하지 않음'),
-                    index=risks.index(existing_risk) if existing_risk in risks else 0)
-                tech_text = st.text_input('선호 기술 (쉼표로 구분)',
-                    value=', '.join(current_profile.get('preferred_tech_stack') or [])[:160], max_chars=160)
-                monthly_amount = st.number_input('월 운영비 상한 (원, 0이면 미설정)', min_value=0, max_value=1_000_000_000,
-                    step=5_000, value=int(current_profile.get('max_monthly_cost_krw') or 0))
-                if st.form_submit_button('이 대화의 조건 수정', width='stretch'):
-                    amended = dict(current_profile)
-                    for field, value in [('objective', objective_text.strip()), ('max_budget_krw',budget_amount),
-                                         ('skill_level',skill_pick),('risk_tolerance',risk_pick)]:
-                        if value:
-                            amended[field] = value
-                        else:
-                            amended.pop(field, None)
-                    amended['preferred_tech_stack'] = [x.strip()[:30] for x in tech_text.split(',') if x.strip()][:10]
-                    if monthly_amount:
-                        amended['max_monthly_cost_krw'] = int(monthly_amount)
-                    else:
-                        amended.pop('max_monthly_cost_krw',None)
-                    current['context']['last_recommendation_profile'] = amended
-                    if isinstance(current['context'].get('recommendation_intake'),dict):
-                        current['context']['recommendation_intake']['profile'] = dict(amended)
-                        current['context']['recommendation_intake']['waiting'] = ''
-                    st.success('구매 조건을 수정했어요. 다음 추천 요청부터 적용해요. 기존 추천 결과는 소급 변경되지 않아요.')
-                    st.rerun()
     uploaded = None
     if token:
-        with st.expander("ZIP 정적 검사", expanded=False):
+        with st.expander("ZIP 검사 · 도구", expanded=False):
             uploaded = st.file_uploader("본인 매물의 ZIP 파일", type=["zip"], help="4MB 이하 · 서버에서 실행하지 않고 정적 검사합니다. 플랫폼에 업로드하지 않습니다.")
 
-    # Tool discovery is part of the product, not a developer-only diagnostic.
-    # Keep the index accessible after the first message without overwhelming
-    # the primary chat. Tools with missing parameters are invoked via chat.
-    with st.expander("사용 가능한 도구 · {}개".format(len(TOOL_LABELS)), expanded=False):
-        for key in ("search_listings", "recommend_listings", "inspect_listing", "get_buyer_preferences",
-                    "list_offers", "get_handover", "get_recent_jobs", "inspect_attached_zip",
-                    "prepare_offer"):
+    # Discoverability without a permanent nine-item sidebar menu.
+    with st.popover('사용 가능한 도구 · {}개'.format(len(TOOL_LABELS))):
+        for key in ('search_listings','recommend_listings','inspect_listing',
+                    'get_buyer_preferences','list_offers','get_handover','get_recent_jobs',
+                    'inspect_attached_zip','prepare_offer'):
             if key in TOOL_LABELS:
-                st.caption("· " + TOOL_LABELS[key] +
-                           (' · 계정 연결 필요' if not token and key in (
-                            'get_buyer_preferences','list_offers','get_handover','get_recent_jobs','prepare_offer') else ''))
-        st.caption("실거래 승인·실행은 ProjectAgain 플랫폼에서만 할 수 있어요.")
-
-    # Technical diagnostics remain optional; the basic tool index does not.
-    if SHOW_DEVELOPER_TOOLS:
-        st.markdown('<div class="side-divider"></div><div class="sidebar-heading">운영 진단</div>', unsafe_allow_html=True)
-        with st.expander("최근 작업", expanded=False):
-            try:
-                jobs = AgentRuntime(actor).request("GET", "/api/agent/v1/jobs").get("items", [])[:5]
-                if not jobs:
-                    st.caption("아직 작업 기록이 없습니다.")
-                for job in jobs:
-                    st.caption("{} · {}".format(job.get("task_type", "작업"), job.get("status", "미확인")))
-            except Exception:
-                st.caption("작업 기록 연결 대기 중")
-        if current["turns"]:
-            st.download_button("대화 기록 저장", json.dumps(current["turns"], ensure_ascii=False, indent=2),
-                               file_name="projectagain_conversation.json", mime="application/json", width="stretch")
-        with st.expander("API 연결 진단", expanded=False):
-            if st.button("연결 상태 검사", key="diagnose_marketplace_v08", width="stretch"):
-                config_error = marketplace_config_error()
-                if config_error:
-                    st.session_state["live_diagnostics_v08"] = {"configuration_error": config_error}
-                else:
-                    with st.spinner("연결 상태 확인 중..."):
-                        st.session_state["live_diagnostics_v08"] = run_diagnostics(
-                            MARKETPLACE_BASE_URL, token=token, include_demo=show_demo)
-            report = st.session_state.get("live_diagnostics_v08")
-            if report:
-                if "configuration_error" in report:
-                    st.error(report["configuration_error"])
-                else:
-                    for title, key in (("공개 매물", "public"), ("시연 포함", "with_demo"),
-                                       ("사용자 인증", "delegation")):
-                        entry = report[key]
-                        status = entry.get("http_status")
-                        count = " · {}건".format(entry["count"]) if entry.get("count") is not None else ""
-                        st.caption("{} · HTTP {}{} · {}".format(title, status if status is not None else "미확인", count, entry["detail"]))
-                    st.info(report["interpretation"])
-        with st.expander("OpenAI 상태", expanded=False):
-            st.caption(ai_activation_reason(bool(OPENAI_API_KEY), ENABLE_OPENAI_CHAT))
-            st.caption("모델: " + (OPENAI_MODEL if ENABLE_OPENAI_CHAT and OPENAI_API_KEY else "비활성"))
+                st.caption('· ' + TOOL_LABELS[key])
+        st.caption('실거래 승인·실행은 ProjectAgain 플랫폼에서만 가능해요.')
 
 # ── Main: state-aware project workbench (results first; transcript on demand). ──
 online = ENABLE_OPENAI_CHAT and bool(OPENAI_API_KEY) and bool(ai_identity)
@@ -1031,8 +950,7 @@ if not session["turns"]:
     st.markdown('''<section class="welcome" aria-labelledby="welcome-title">
         <div class="welcome-eyebrow"><span class="welcome-rule" aria-hidden="true"></span>PROJECTAGAIN / AI DESK</div>
         <h1 class="welcome-title" id="welcome-title">어떤 프로젝트를<br>찾고 계신가요?</h1>
-        <p class="welcome-description">예산이나 개발 기술, 원하는 운영 방식을 알려주세요. <br class="desktop-break">
-        매물을 찾고 검토할 내용을 대화 안에서 정리해 드립니다.</p>
+        <p class="welcome-description">원하는 조건을 알려주세요. 매물 탐색부터 비교·검토까지 함께 정리해 드려요.</p>
         </section>''', unsafe_allow_html=True)
     examples = [
         ("01", "매물 둘러보기", "등록된 프로젝트부터 살펴보기", "현재 등록된 매물 목록 보여줘"),
@@ -1042,8 +960,8 @@ if not session["turns"]:
     ]
     with st.container(key="welcome_actions"):
         st.markdown('''<div class="welcome-actions-heading">
-           <span class="welcome-actions-title">이런 요청부터 시작해 보세요</span>
-           <span class="welcome-actions-count">QUICK START / 04</span>
+           <span class="welcome-actions-title">바로 시작하기</span>
+           <span class="welcome-actions-count">4가지 시작 방법</span>
            </div>''', unsafe_allow_html=True)
         # Use one pair of columns per row. Mobile stacking keeps the reading
         # and keyboard order 01 -> 02 -> 03 -> 04, including screen readers.
@@ -1053,10 +971,11 @@ if not session["turns"]:
                 index = start + offset
                 number, title, hint, prompt = examples[index]
                 with column:
-                    st.markdown('<div class="suggestion-index">{}</div>'.format(number), unsafe_allow_html=True)
-                    if st.button(title, width="stretch", key="welcome_" + str(index)):
-                        pending_prompt = prompt
-                    st.markdown('<p class="suggestion-hint">{}</p>'.format(escape(hint)), unsafe_allow_html=True)
+                    with st.container(key='welcome_tile_' + str(index)):
+                        st.markdown('<div class="suggestion-index">{}</div>'.format(number), unsafe_allow_html=True)
+                        if st.button(title, width="stretch", key="welcome_" + str(index)):
+                            pending_prompt = prompt
+                        st.markdown('<p class="suggestion-hint">{}</p>'.format(escape(hint)), unsafe_allow_html=True)
 
 # A pending task is secondary to the result, unless it requests immediate
 # input/approval. Keep the precise progression and existing safe controls.
@@ -1138,7 +1057,8 @@ if session['turns']:
 if session['turns']:
     st.markdown('<div class="conversation-history-separator"></div>',unsafe_allow_html=True)
     with st.container(key='conversation_history_v0174'):
-        with st.expander('이전 대화 및 도구 실행 기록 · {}개 메시지'.format(len(session['turns'])), expanded=False):
+        with st.expander('대화 기록 · {}개 메시지'.format(len(session['turns'])),
+                         expanded=workbench['focus'] in ('conversation', 'restored')):
             st.caption('과거 답변은 당시 조회 내용을 바탕으로 해요. 실제 매물 정보와 거래 상태는 새로 확인해 주세요.')
             for i, turn in enumerate(session['turns']):
                 show_turn(turn, i)

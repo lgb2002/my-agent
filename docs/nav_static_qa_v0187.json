@@ -1,0 +1,24 @@
+{
+  "static_only": true,
+  "streamlit_cloud_verified": false,
+  "results": [
+    {
+      "width": 390,
+      "doc": 390,
+      "tile_count": 4,
+      "button_height": 43
+    },
+    {
+      "width": 768,
+      "doc": 768,
+      "tile_count": 4,
+      "button_height": 43
+    },
+    {
+      "width": 1280,
+      "doc": 1280,
+      "tile_count": 4,
+      "button_height": 43
+    }
+  ]
+}

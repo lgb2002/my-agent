@@ -1,3 +1,13 @@
+# ProjectAgain Agent v0.18.7 — 대화 중심 UI · Supabase 대화 저장
+
+이번 버전은 첫 화면에 윤곽이 있는 시작 영역·4개의 작업 카드와 **독립된 대화 목록을 사이드바에 바로 표시**합니다. 사용자용 DB/운영 진단 버튼은 숨겼으며, 기존 진단 모듈은 개발자용 코드로 유지합니다.
+
+**클라우드 대화 저장은 기본 OFF입니다.** 실제 ProjectAgain 계정으로 로그인하고 왼쪽의 `Supabase에 자동 저장`을 켜면, 기존 `AGENT_STATE_DATABASE_URL`의 PostgreSQL에 대화 문장과 안전한 도구 요약을 계정별로 저장합니다. 별도 Supabase 키나 새로운 Secrets는 필요하지 않습니다. 과거 저장 대화는 동일한 목록에서 복원할 수 있습니다. 상세 설명: [`docs/CHAT_NAVIGATION_V0187.md`](docs/CHAT_NAVIGATION_V0187.md).
+
+기존 OAuth Broker 자동 갱신, 실제 API 전용 정책, 9개 도구, 승인/거래 경계, `DESIGN.md` 원칙을 유지합니다. `data/`, `.env`, `.venv`, 기존 Secrets 및 사용자 DB는 덮어쓰지 마세요. 오프라인 테스트 및 정적 CSS QA는 완료했고 **실제 Streamlit Cloud/Supabase 다중 기기 검증은 미완료**입니다.
+
+---
+
 > **v0.18.6 DB 진단 확장:** 연결 오류가 `기타 데이터베이스 연결 오류`로 분류되면, DNS·TCP 포트·libpq URI 해석·안전한 드라이버 오류 종류를 단계별로 추가 확인합니다. [진단 가이드](docs/BROKER_STORAGE_DIAGNOSTICS_V0186.md).
 
 # ProjectAgain Agent v0.18.5 — 로그인 저장소 연결 진단

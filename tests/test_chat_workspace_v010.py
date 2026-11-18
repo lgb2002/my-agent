@@ -42,23 +42,17 @@ class ChatWorkspaceV010Tests(unittest.TestCase):
         self.assertIn("for i, turn in enumerate(session['turns']):",source)
         self.assertIn('pending_ui(session, actor)',source)
         self.assertIn("for i, turn in enumerate(session['turns']):",source)
-        self.assertIn('if SHOW_DEVELOPER_TOOLS:',source)
+        self.assertNotIn('if SHOW_DEVELOPER_TOOLS:',source)
         self.assertIn('previous_filter != show_demo',source)
         self.assertNotIn('session["turns"][-80:]',source)
 
-    def test_developer_ui_off_by_default_and_hidden_from_public_ui(self):
+    def test_developer_diagnostics_removed_from_main_sidebar(self):
         config=(ROOT/'core/config.py').read_text(encoding='utf-8')
         self.assertIn("os.environ.get('SHOW_DEVELOPER_TOOLS', 'false')",config)
         source=(ROOT/'app.py').read_text(encoding='utf-8')
-        tree=ast.parse(source)
-        developer_block=next(node for node in ast.walk(tree)
-            if isinstance(node,ast.If) and isinstance(node.test,ast.Name) and node.test.id=='SHOW_DEVELOPER_TOOLS')
-        block_text=ast.get_source_segment(source,developer_block)
-        for label in ('최근 작업','대화 기록 저장','API 연결 진단','OpenAI 상태'):
-            self.assertIn(label,block_text)
-        # The general tool list is now user-facing; it must not be gated.
-        self.assertIn('사용 가능한 도구 · {}개', source)
-        self.assertNotIn('사용 가능한 도구', block_text)
+        for label in ('API 연결 진단', '로그인 저장소 오류 진단', 'DB 연결 진단 실행'):
+            self.assertNotIn(label,source)
+        self.assertIn('사용 가능한 도구 · {}개',source)
 
     def test_document_captures_core_information_design_principles(self):
         doc=(ROOT/'DESIGN.md').read_text(encoding='utf-8')

@@ -121,11 +121,11 @@ class BrokerStorageDiagnosticTests(unittest.TestCase):
         self.assertEqual(result['status'], '연결 실패')
         self.assertSafe(result)
 
-    def test_app_diagnostic_is_login_bound_and_opt_in(self):
+    def test_database_diagnostic_ui_is_hidden_in_public_app(self):
         app=(Path(__file__).resolve().parents[1]/'app.py').read_text(encoding='utf8')
-        self.assertGreater(app.index('if st.button(\'DB 연결 진단 실행\''), app.index("if not bool(getattr(st.user,'is_logged_in',False))"))
+        self.assertNotIn("st.button('DB 연결 진단 실행'", app)
+        self.assertNotIn("with st.expander('로그인 저장소 오류 진단'", app)
         self.assertIn("storage_diagnosis_needed = exc.code == 'storage_unavailable'",app)
-        self.assertIn('now-last<30',app)
         self.assertNotIn('st.exception(exc)',app)
 
 

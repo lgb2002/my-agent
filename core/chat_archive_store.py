@@ -16,6 +16,9 @@ _CREATE = '''CREATE TABLE IF NOT EXISTS agent_saved_conversations (
  owner_key TEXT NOT NULL, conversation_id TEXT NOT NULL, title TEXT NOT NULL,
  transcript_json TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
  PRIMARY KEY(owner_key, conversation_id))'''
+_SETTINGS = '''CREATE TABLE IF NOT EXISTS agent_chat_settings (
+ owner_key TEXT PRIMARY KEY, auto_save INTEGER NOT NULL DEFAULT 0,
+ updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)'''
 _ID = re.compile(r'^[a-f0-9]{32}$')
 
 
@@ -69,13 +72,13 @@ def save_conversation(owner, ident, session):
              (owner,ident,title,raw))
 
 
-def list_conversations(owner, limit=30):
+def list_conversations(owner, limit=60):
     _guard_owner(owner)
     with _LOCK, _db_connection() as con:
         con.execute(_CREATE)
         rows = con.execute(_sql('''SELECT conversation_id,title,updated_at
             FROM agent_saved_conversations WHERE owner_key=? ORDER BY updated_at DESC LIMIT ?'''),
-            (owner, min(60,max(1,int(limit))))).fetchall()
+            (owner, min(100,max(1,int(limit))))).fetchall()
     return [{'id':ident,'title':str(title)[:45], 'updated_at':str(updated)}
             for ident,title,updated in rows]
 
@@ -103,3 +106,26 @@ def delete_conversation(owner, ident):
     with _LOCK, _db_connection() as con:
         con.execute(_CREATE)
         con.execute(_sql('DELETE FROM agent_saved_conversations WHERE owner_key=? AND conversation_id=?'), (owner,ident))
+
+
+def chat_auto_save_enabled(owner):
+    """Return saved, account-specific consent. No row means disabled."""
+    _guard_owner(owner)
+    with _LOCK, _db_connection() as con:
+        con.execute(_SETTINGS)
+        row = con.execute(_sql('SELECT auto_save FROM agent_chat_settings WHERE owner_key=?'),
+                          (owner,)).fetchone()
+    return bool(row and row[0])
+
+
+def set_chat_auto_save(owner, enabled):
+    """Persist opt-in; disabling does not delete earlier saved conversations."""
+    _guard_owner(owner)
+    if not isinstance(enabled, bool):
+        raise TypeError('대화 저장 동의 상태가 올바르지 않습니다.')
+    with _LOCK, _db_connection() as con:
+        con.execute(_SETTINGS)
+        con.execute(_sql('''INSERT INTO agent_chat_settings(owner_key,auto_save,updated_at)
+            VALUES(?,?,CURRENT_TIMESTAMP) ON CONFLICT(owner_key)
+            DO UPDATE SET auto_save=excluded.auto_save,updated_at=CURRENT_TIMESTAMP'''),
+            (owner, int(enabled)))

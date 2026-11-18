@@ -316,3 +316,73 @@ html,body,[data-testid="stApp"] {
 @media (prefers-reduced-motion:reduce) {
   *,*::before,*::after {transition:none !important;animation:none !important;scroll-behavior:auto !important;}
 }
+
+/* v0.18.7 / conversation-led navigation and first-action cards.
+   Native Streamlit controls remain keyboard-accessible; no fake click surfaces. */
+[data-testid="stSidebar"] {background:#F4F7F2;}
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {gap:.43rem;}
+[data-testid="stSidebar"] .brand {margin:8px 0 16px;}
+.sidebar-chat-title {font-size:.96rem;font-weight:760;letter-spacing:-.035em;
+  color:var(--ink);margin:12px 0 5px;}
+.sidebar-chat-section {font-size:.74rem;font-weight:710;letter-spacing:.025em;
+  color:var(--muted);margin:13px 0 6px;}
+.sidebar-chat-save {font-size:.77rem;color:var(--muted);font-weight:710;
+  border-top:1px solid var(--line);padding-top:13px;margin-top:10px;}
+.sidebar-chat-separator {height:1px;background:var(--line);margin:17px 0 12px;}
+[data-testid="stSidebar"] [class*="st-key-chat_nav_row_v0187_"] {
+  border-radius:9px;min-width:0;padding:2px 3px;
+}
+[data-testid="stSidebar"] [class*="st-key-chat_nav_row_v0187_"]:has(button:disabled) {
+  background:#E3ECE2;
+}
+[data-testid="stSidebar"] [class*="st-key-chat_nav_row_v0187_"] [data-testid="stHorizontalBlock"] {
+  gap:3px;align-items:center;
+}
+[data-testid="stSidebar"] [class*="st-key-chat_nav_row_v0187_"] .stButton button {
+  min-height:37px;border:0;background:transparent;box-shadow:none;
+  color:var(--ink-soft);font-size:.86rem;font-weight:570;
+  padding:6px 7px;line-height:1.38;text-align:left;
+}
+[data-testid="stSidebar"] [class*="st-key-chat_nav_row_v0187_"] .stButton button:hover {
+  background:#EAF1E9;color:var(--ink);
+}
+[data-testid="stSidebar"] [class*="st-key-chat_nav_row_v0187_"] .stButton button:disabled {
+  background:transparent;color:var(--accent);font-weight:760;opacity:1;
+}
+[data-testid="stSidebar"] [class*="st-key-chat_nav_row_v0187_"] [data-testid="stPopover"] button {
+  min-height:36px;width:34px;border:0;background:transparent;
+  color:var(--muted);padding:3px;box-shadow:none;
+}
+/* The welcome panel is a focal surface, not another paragraph on the page. */
+.welcome {max-width:none;margin:35px 0 24px;padding:38px clamp(24px,4vw,45px) 35px;
+  border:1px solid var(--line-strong);border-radius:20px;background:var(--paper);
+  box-shadow:0 8px 25px rgba(19,48,31,.035);}
+.welcome-eyebrow {margin-bottom:19px;}
+.welcome-title {font-size:clamp(2rem,3.35vw,2.65rem);}
+.welcome-description {max-width:565px;margin-top:14px;line-height:1.64;color:var(--ink-soft);}
+.welcome-actions-heading {border:0;margin:18px 0 11px;padding:0;}
+.welcome-actions-count {letter-spacing:0;color:var(--muted);font-size:.77rem;}
+.st-key-welcome_actions [class*="st-key-welcome_tile_"] {
+  background:var(--paper);border:1px solid var(--line-strong);border-radius:14px;
+  padding:16px 19px 12px;min-height:160px;
+  transition:border-color .16s ease,box-shadow .16s ease,transform .16s ease;
+}
+.st-key-welcome_actions [class*="st-key-welcome_tile_"]:has(button:hover) {
+  border-color:#95B4A0;box-shadow:0 5px 16px rgba(24,74,44,.08);
+}
+.st-key-welcome_actions .suggestion-index {margin:0 0 4px;font-size:.73rem;color:var(--accent);}
+.st-key-welcome_actions .stButton>button:not([kind="primary"]) {
+  padding:4px 0;min-height:43px;border:0;background:transparent;
+  font-size:1.04rem;color:var(--ink);}
+.st-key-welcome_actions .stButton>button:not([kind="primary"]):hover {color:var(--accent-hover);}
+.st-key-welcome_actions .suggestion-hint {font-size:.83rem;line-height:1.5;
+  margin:5px 0 0;color:var(--muted);}
+@media (max-width:760px) {
+  .welcome {margin:17px 0 20px;padding:28px 22px 26px;border-radius:15px;}
+  .welcome-title {font-size:clamp(1.83rem,7.5vw,2.25rem);}
+  .welcome-description {font-size:.92rem;}
+  .st-key-welcome_actions [class*="st-key-welcome_tile_"] {min-height:0;padding:13px 15px 12px;margin-bottom:8px;}
+}
+@media (prefers-reduced-motion: reduce) {
+  .st-key-welcome_actions [class*="st-key-welcome_tile_"] {transition:none;}
+}

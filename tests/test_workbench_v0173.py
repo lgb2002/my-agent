@@ -135,7 +135,7 @@ class WorkbenchProjection(unittest.TestCase):
         src=(ROOT/'app.py').read_text(encoding='utf-8')
         ast.parse(src)
         for token in ('render_primary_workspace(workbench, session, actor)',
-                      "with st.expander('이전 대화 및 도구 실행 기록",'show_search_workspace',
+                      "with st.expander('대화 기록 · {}개 메시지",'show_search_workspace',
                       'show_inspection_workspace', 'show_recommendation_snapshot',
                       'pending_ui(session, actor)', 'st.chat_input', 'include_demo=show_demo'):
             self.assertIn(token,src)
