@@ -1,3 +1,12 @@
+## v0.19.2 — 사이드바 디자인 정리 및 플랫폼 통합 로그인 요청 문서 (2026-11-18)
+
+- **디자인만 변경:** 사이드바 `새 대화` 대형 초록 버튼을 경계선 없는 작은 내비게이션 행으로 전환, 대화 검색도 클릭 시에만 입력창을 표시. 날짜별 최근 대화는 본문 영역에서 스크롤, 선택된 대화는 기존의 은은한 배경으로 표시.
+- 하단 `계정 · 설정` 외곽 버튼을 아바타 아이콘이 있는 `내 계정` 행으로 전환. 계정 전환·설정·웹사이트 이동·로그아웃은 **단일 간결한 팝오버 메뉴**로 구성. 비로그인 회원가입 링크 유지.
+- 새 대화/검색은 데스크톱 36px, 계정 진입 39px, 팝오버 메뉴 36px. 모바일 터치 44px. 메인 채팅/거래 승인 동작의 크기·레이아웃은 변경하지 않음.
+- `docs/PLATFORM_UNIFIED_LOGIN_HANDOFF_V0192.md`: 플랫폼 측의 **한 번의 로그인/동의 경험** 구현 요청, v0.23/v0.25 호환·브라우저별 바인딩·토큰 보호·승인 정책·통합 E2E 기준 명시. 이는 **요청/설계 문서**일 뿐 플랫폼 인증은 수정·배포하지 않음.
+- 새로운 Secrets/패키지/DB 마이그레이션 없음. 동일 ProjectAgain API, OAuth Broker/자동 갱신, Supabase 대화 저장, 기존 승인/거래 보안 경계 유지.
+- 오프라인 Python 테스트 **304개 통과**, Chromium 정적 사이드바 fixture 390/768/1280px 검수. **실제 Streamlit Cloud 화면·동작, 플랫폼 인증 단일화는 미검증/미구현**.
+
 ## v0.19.1 — 대화 전환/응답 속도·한국어 도구 단계·사이드바 높이 개선 (2026-11-18)
 
 - 대화 전환·새 대화·대화별 메뉴에서 불필요한 추가 `st.rerun()`을 제거. 계정 검증 후 해당 소유자만 조회하고 메인 채팅에서 바로 표시. 제목 목록은 소유자별 18초 캐시, 저장·삭제 즉시 무효화.
@@ -222,3 +231,14 @@
 - Broker 로그아웃은 플랫폼의 해당 세션 폐기를 시도하고 Streamlit 로컬 연결을 삭제한다.
 - 첫 연결에 2단계(기존 OIDC 로그인 → Broker 추가 동의)가 필요함을 UI 및 문서에 명시했다.
 - 새 보안/실패 테스트 19개 추가. 실제 Streamlit Cloud ↔ Platform v0.25 운영 E2E는 미검증.
+
+## v0.19.3 (2026-11-18) — v0.37 단일 로그인 Agent 어댑터
+
+- `unified_entry.py`의 `st.App` ASGI 엔트리포인트로 기존 UI/레거시 인증을 보존하면서 신규 secure HttpOnly 브라우저 세션 라우트 추가
+- 플랫폼 v0.37 `/broker/unified/capabilities`, `/broker/unified/intents`, 기존 ticket exchange와 별도 추가 동의 연동
+- JWT RS256 issuer/audience/kid/signature/nonce/proof/state/sub 검증 후 서버 DB 세션 확정; 브라우저에는 토큰과 proof 비노출
+- Supabase PostgreSQL에 신규 `agent_unified_login_*` 테이블만 추가, 기존 데이터와 OIDC/Broker 유지
+- 로그인 1회 진입, 현재 브라우저 세션 해제, 플랫폼 계정 전환 연동; 기존 GET 재확인 및 토큰 갱신 경계 유지
+- 기능 플래그 `AGENT_UNIFIED_LOGIN_ENABLED=false` 기본 유지. 운영 v0.37·Streamlit Cloud E2E 전에 강제 활성화하지 않음
+- Streamlit 1.57+ ASGI 기능 필요. 실환경 E2E 전이므로 코드·오프라인 테스트 완료와 운영 검증 완료를 구분함
+- 자세한 활성화/롤백 안내: `docs/UNIFIED_LOGIN_V037_AGENT_V0193.md`

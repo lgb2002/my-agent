@@ -1,3 +1,15 @@
+# ProjectAgain Agent v0.19.2 — 간결한 대화 사이드바 · 플랫폼 통합 로그인 설계 요청
+
+**이번 Agent 변경은 디자인 전용**입니다. 사이드바의 큰 `새 대화` 버튼과 상시 검색창을 접고, 위쪽은 아이콘/텍스트 메뉴, 가운데는 최근 대화, 하단은 `내 계정`으로 재구성했습니다. 계정 메뉴는 작은 팝오버로 통합했으며, 기존 대화 선택·검색·삭제·자동 저장과 계정 전환·설정·로그아웃 동작은 보존했습니다.
+
+**플랫폼 개발 채팅에 전달할 별도 요청 문서:** [`docs/PLATFORM_UNIFIED_LOGIN_HANDOFF_V0192.md`](docs/PLATFORM_UNIFIED_LOGIN_HANDOFF_V0192.md). OIDC 로그인과 Broker 권한 연결을 한 번의 사용자 여정으로 만들기 위한 요구사항이며, 이 Agent v0.19.2에서는 인증 흐름·API를 변경하지 않았습니다. 실제 단일 로그인 기능은 플랫폼 신규 계약과 Agent 후속 작업이 모두 필요합니다.
+
+**배포:** v0.19.1 전체 소스 기반 신규 ZIP. 기존 GitHub 프로젝트에 병합 후 Streamlit Cloud 재시작. 새로운 Secrets, `requirements.txt` 변경, Supabase DB 변경, Replit 거래 플랫폼 재배포는 필요하지 않습니다. `data/`, 사용자별 데이터, `.env`, `.venv`, 실 Secret은 기존 값을 보존하세요.
+
+**검증:** Python 오프라인 304개 테스트 모두 통과. 정적 Chromium fixture 390/768/1280px에서 가로 넘침 및 하단 메뉴 겹침 없음. 정적 미리보기는 실제 Streamlit UI 실행 검증이 아닙니다. 상세: [`docs/SIDEBAR_DESIGN_V0192.md`](docs/SIDEBAR_DESIGN_V0192.md).
+
+---
+
 # ProjectAgain Agent v0.19.1 — 빠른 대화·도구 실행 상태·작은 사이드바
 
 **핵심 변경**: 대화 목록의 불필요한 Supabase 반복 조회와 대화 전체 해시 계산을 줄이고, 이전 대화를 선택하면 추가 재실행 없이 메인에 복원합니다. 긴 대화는 최근 메시지를 먼저 표시하며 과거 기록은 보존합니다. 실제 실행된 도구가 **지금 어떤 작업을 하는지 한국어로 단계별** 표시됩니다. 답변 생성 후 반복 화면 갱신을 줄이고 계정 메뉴와 새 대화 버튼의 세로 크기를 낮췄습니다.
@@ -255,3 +267,9 @@ python -m scripts.run_tests
 플랫폼 v0.25의 OAuth Broker를 이용해 Access Token 만료 전에 필요할 때만 갱신하는 코드가 추가되었다. 기존 수동 위임 토큰 입력은 계속 제거되어 있고, 플랫폼 API 단일 데이터 출처·거래 승인 정책은 변하지 않았다.
 
 **실제 운영 적용 전 필수 읽기:** [`docs/OAUTH_BROKER_AUTO_REFRESH_V0181.md`](docs/OAUTH_BROKER_AUTO_REFRESH_V0181.md). 처음 한 번 기존 Streamlit OIDC 로그인과 Broker 권한 동의가 필요하며, 두 단계를 마친 뒤에는 Broker에서 Access Token을 자동 회전한다. 플랫폼 Replit v0.25 마이그레이션/활성화와 Streamlit PostgreSQL, 신규 Secrets, `requirements-broker-v0181.txt`의 추가 의존성 설치가 선행되어야 한다. 지금까지는 로컬 격리 테스트만 완료했으며 실배포 로그인 왕복은 미검증이다.
+
+## v0.19.3 — Platform v0.37 단일 로그인 어댑터
+
+신규 로그인 코드가 포함되었지만 **기본적으로 꺼져 있고 운영 E2E는 미검증**이다. 기존 Streamlit Cloud `app.py`와 OIDC/Broker 로그인은 유지된다. 통합 로그인을 사용하려면 운영 플랫폼 v0.37 + DB 마이그레이션 `0014_unified_login`, 배포용 `OAUTH_BROKER_UNIFIED_LOGIN_ENABLED=true`를 먼저 확인한 다음 Streamlit Cloud Main file path를 `unified_entry.py`로 변경하고, 기존 Secrets는 유지한 채 `AGENT_UNIFIED_LOGIN_ENABLED=true`를 추가한다. 테스트 전에는 `false`로 둔다.
+
+자세한 실행 순서, 신규 서버 측 쿠키, 자동 토큰 갱신, 검증, 롤백 방법: `docs/UNIFIED_LOGIN_V037_AGENT_V0193.md`.

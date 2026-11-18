@@ -32,6 +32,7 @@ from core.request_context import (set_request_context, set_broker_refresh_handle
 from core.oidc_session import resolve_login, revoke_access, _fetch_identity  # noqa: E402
 from core.oauth_broker import (BrokerStore,BrokerClient,BrokerError,BrokerReauth,
     _browser_identity,new_intent,resolve_broker,BROKER_SCOPE)  # noqa: E402
+from core.unified_login import (UnifiedStore, UnifiedClient, COOKIE_NAME, cookie_binding)  # noqa: E402
 from core.marketplace_client import origin_only  # noqa: E402
 from core.ai_usage import set_ai_identity, usage_snapshot, storage_kind as ai_usage_storage_kind  # noqa: E402
 from core.llm_service import contains_obvious_secret  # noqa: E402
@@ -631,6 +632,89 @@ def broker_connect_ui(platform_origin, native_configured):
 
 
 
+
+# -- ProjectAgain v0.37: cookie-bound ONE-visit login; never uses st.user. --
+def unified_connect_ui(platform_origin):
+    """Resolve an authenticated ASGI browser cookie, or display one start action.
+
+    The cookie MUST come from the same-origin st.App HTTP endpoint, not a query
+    param, JS-generated value, or Streamlit's ephemeral session_state.
+    """
+    notice = st.query_params.get('pa_login_notice')
+    if 'pa_login_notice' in st.query_params:
+        del st.query_params['pa_login_notice']
+    if notice == 'cancelled':
+        st.info('계정 권한 연결을 취소했어요.')
+    elif notice == 'failed':
+        st.warning('계정 연결을 완료하지 못했어요. 다시 시작해 주세요.')
+
+    try:
+        raw_cookie = st.context.cookies.get(COOKIE_NAME, '')
+    except (AttributeError, KeyError, TypeError):
+        raw_cookie = ''
+    binding = cookie_binding(raw_cookie)
+    start_link = 'https://projectagain.streamlit.app/pa-agent/auth/start'
+    if not binding:
+        st.link_button('ProjectAgain으로 시작하기', start_link, type='primary', width='stretch')
+        return None, None
+
+    try:
+        origin = os.environ.get('PROJECTAGAIN_API_ORIGIN','')
+        if origin_only(origin)!=origin_only(platform_origin) or origin_only(origin)!='https://projectagain.kr':
+            raise BrokerError('issuer_mismatch', 'ProjectAgain 주소가 일치하지 않아요.')
+        store = UnifiedStore(os.environ.get('AGENT_STATE_DATABASE_URL',''),
+                             os.environ.get('AGENT_BROKER_STORE_KEY',''))
+        client = UnifiedClient(origin,
+                               os.environ.get('PROJECTAGAIN_BROKER_CLIENT_ID',''),
+                               os.environ.get('PROJECTAGAIN_BROKER_CLIENT_SECRET',''))
+        uid = store.lookup_identity(binding)
+        if uid:
+            login,record=resolve_broker(store,client,binding,uid,platform_origin)
+        else:
+            login,record=None,None
+    except (BrokerError,BrokerReauth,ValueError,TypeError) as exc:
+        login,record=None,None
+        st.warning(str(exc) if isinstance(exc,BrokerError) else '계정 연결을 확인하지 못했어요.')
+
+    if login and login.connected and record:
+        def ensure_fresh():
+            fresh,scopes=client.access(record)
+            if 'openid' not in scopes:
+                raise BrokerError('invalid_scope', '계정 접근 권한을 확인할 수 없어요.')
+            set_current_access_token(fresh)
+            return fresh
+        set_broker_access_handler(ensure_fresh)
+
+        def refresh_one_get(observed_token):
+            try:
+                fresh,_ = client.access(record,force=True,observed_token=observed_token)
+                status, profile = _fetch_identity(origin_only(origin)+'/api/v1/oauth/userinfo',fresh)
+                status2, me = _fetch_identity(origin_only(origin)+'/api/v1/auth/me',fresh)
+                if (status!='ok' or status2!='ok' or not isinstance(profile,dict)
+                        or not isinstance(me,dict) or profile.get('sub')!=uid or me.get('id')!=uid):
+                    return None
+                set_current_access_token(fresh)
+                return fresh
+            except (BrokerError,AttributeError):
+                return None
+        # Additional offer:draft consent stays separate; NEVER silently add
+        # write scopes to the initial v0.37 login.
+        if ENABLE_LIVE_DRAFTS and not login.has_scope('offer:draft'):
+            st.caption('구매 제안 초안을 등록하려면 별도 권한 동의가 필요해요.')
+            if st.button('제안 초안 권한 추가', key='unified_draft_request'):
+                try:
+                    st.session_state['unified_draft_url']=store.begin_incremental(raw_cookie,client)
+                    st.session_state['unified_draft_created']=time.time()
+                except BrokerError:
+                    st.warning('추가 권한 요청을 준비하지 못했어요.')
+            if (st.session_state.get('unified_draft_url') and
+                time.time()-float(st.session_state.get('unified_draft_created',0))<240):
+                st.link_button('추가 권한 동의 열기',st.session_state['unified_draft_url'])
+        return login,refresh_one_get
+    st.caption('ProjectAgain 계정 연결이 필요해요.')
+    st.link_button('ProjectAgain으로 시작하기', start_link, type='primary', width='stretch')
+    return None,None
+
 # ── Secondary controls live in a real Streamlit modal; they are not a wall of
 # permanent sidebar panels. A dialog never bypasses platform API permissions.
 class _SelectedZip:
@@ -872,12 +956,18 @@ def show_settings_dialog(scope, current, active_archive, cloud_owner, actor,
             if usage:
                 st.caption('AI 오늘 사용 · {} / {}회'.format(usage['calls'], usage['max_calls']))
         if connected:
-            if st.button('다른 계정으로 로그인', key='settings_change_account_v0190'):
-                _logout_from_settings(broker_requested=broker_requested, platform_issuer=platform_issuer,
-                                      auth_settings=auth_settings, token=token)
-            if st.button('로그아웃', key='settings_logout_v0189'):
-                _logout_from_settings(broker_requested=broker_requested, platform_issuer=platform_issuer,
-                                      auth_settings=auth_settings, token=token)
+            if unified_mode:
+                st.link_button('다른 계정으로 로그인',
+                    'https://projectagain.streamlit.app/pa-agent/auth/logout?next=switch')
+                st.link_button('로그아웃',
+                    'https://projectagain.streamlit.app/pa-agent/auth/logout')
+            else:
+                if st.button('다른 계정으로 로그인', key='settings_change_account_v0190'):
+                    _logout_from_settings(broker_requested=broker_requested, platform_issuer=platform_issuer,
+                                          auth_settings=auth_settings, token=token)
+                if st.button('로그아웃', key='settings_logout_v0189'):
+                    _logout_from_settings(broker_requested=broker_requested, platform_issuer=platform_issuer,
+                                          auth_settings=auth_settings, token=token)
         else:
             st.link_button('ProjectAgain에서 회원가입', MARKETPLACE_BASE_URL)
         with st.expander('사용 가능한 도구 · {}개'.format(len(TOOL_LABELS)), expanded=False):
@@ -915,13 +1005,26 @@ with st.sidebar:
     platform_issuer = str(auth_settings.get('server_metadata_url') or '').removesuffix('/.well-known/openid-configuration')
     set_broker_refresh_handler(None)
     set_broker_access_handler(None)
+    unified_mode = (str(os.environ.get('AGENT_UNIFIED_LOGIN_ENABLED','')).lower() in ('true','1','yes')
+                    and os.environ.get('AGENT_UNIFIED_ENTRY_READY') == '1')
+    if (str(os.environ.get('AGENT_UNIFIED_LOGIN_ENABLED','')).lower() in ('true','1','yes')
+            and not unified_mode):
+        st.warning('안전한 통합 로그인 진입점이 없어 기존 로그인 방식을 사용해요.')
     broker_requested = any(os.environ.get(k,'').strip() for k in (
         'PROJECTAGAIN_BROKER_CLIENT_ID','PROJECTAGAIN_BROKER_CLIENT_SECRET',
         'PROJECTAGAIN_API_ORIGIN','AGENT_BROKER_STORE_KEY',
         'PROJECTAGAIN_BROKER_REDIRECT_URL'))
     auth_started_v0191 = time.perf_counter()
     with account_panel:
-        if broker_requested:
+        if unified_mode:
+            login,refresh_handler=unified_connect_ui(MARKETPLACE_BASE_URL)
+            token=login.access_token if login and login.connected else ''
+            connected=bool(token)
+            set_request_context(token=token,visitor_id=visitor,include_demo=show_demo)
+            set_broker_refresh_handler(refresh_handler)
+            ai_identity=login.ai_identity if connected else None
+            set_ai_identity(ai_identity)
+        elif broker_requested:
             login,refresh_handler=broker_connect_ui(MARKETPLACE_BASE_URL,configured)
             token=login.access_token if login and login.connected else ''
             connected=bool(token)
@@ -963,6 +1066,18 @@ with st.sidebar:
         # AI quota details moved into Settings. Login and scope warnings stay visible.
     st.session_state.setdefault('recent_stage_times_v0191', {})['auth'] = round(
         time.perf_counter() - auth_started_v0191, 3)
+    if unified_mode:
+        # Streamlit WebSockets can outlive an HTTP cookie-clear response.
+        # On the next rerun, wipe all in-memory account-scoped UI state if the
+        # verified Broker principal changed, vanished or was revoked.
+        new_owner = login.owner_key if login and login.connected else None
+        prev_owner = st.session_state.get('unified_previous_owner_v0193')
+        if prev_owner != new_owner:
+            for key in ('chat_sessions_v06', 'conversation_archive_v0172',
+                        'cloud_chat_list_cache_v0191', 'pending_zip_v0189',
+                        'broker_authorization_url', 'unified_draft_url'):
+                st.session_state.pop(key, None)
+        st.session_state['unified_previous_owner_v0193'] = new_owner
     with chat_panel:
         owner_scope = login.owner_key[:12] if connected else visitor
         scope = conversation_scope('live', actor, owner_scope)
@@ -1062,11 +1177,20 @@ with st.sidebar:
             st.session_state.pop('pending_zip_v0189', None)
             current = start_conversation(active_archive)
             st.session_state['chat_sessions_v06'][scope] = current
-        st.button('＋ 새 대화', type='primary', width='stretch', key='chat_new_v0187',
-                  on_click=_request_new_conversation)
+        # v0.19.2: navigational actions are quiet menu rows, not full-width CTA cards.
+        # Keep the original callbacks: only the presentation is changed.
+        with st.container(key='sidebar_primary_actions_v0192'):
+            st.button('새 대화', icon=':material/edit_square:', type='tertiary',
+                      width='stretch', key='chat_new_v0187',
+                      on_click=_request_new_conversation)
+            if st.button('대화 검색', icon=':material/search:', type='tertiary',
+                         width='stretch', key='chat_search_toggle_v0192'):
+                st.session_state['chat_search_open_v0192'] = not st.session_state.get('chat_search_open_v0192', False)
+        search_term = ''
+        if st.session_state.get('chat_search_open_v0192', False):
+            search_term = st.text_input('대화 검색', placeholder='제목으로 검색',
+                                        key='chat_search_v0188', label_visibility='collapsed')
         st.markdown('<div class="sidebar-chat-title">최근 대화</div>', unsafe_allow_html=True)
-        search_term = st.text_input('대화 검색', placeholder='대화 제목 검색',
-                                    key='chat_search_v0188', label_visibility='collapsed')
         chat_rows = search_conversations(visible_conversations(active_archive, cloud_rows, limit=100), search_term)
         with st.container(key='sidebar_recent_v0189'):
             last_group = None
@@ -1130,24 +1254,41 @@ with st.sidebar:
             if pref_owner and (storage_kind() == 'postgres' or storage_health()['ready']):
                 current['context']['_persist_owner'] = pref_owner
         with account_panel:
-            with st.popover('계정 · 설정 ▾', use_container_width=True):
+            # One low-emphasis account entry at the foot of the chat navigation.
+            # Login and Broker grants remain separate until the platform contract evolves.
+            with st.popover('내 계정', icon=':material/account_circle:', use_container_width=True):
                 with st.container(key='compact_account_popover_v0191'):
+                    st.markdown('<div class="account-popover-heading-v0192">ProjectAgain 계정</div>',
+                                unsafe_allow_html=True)
                     if connected:
-                        st.caption('ProjectAgain 계정으로 연결됨')
-                        if st.button('다른 계정으로 로그인', key='account_switch_v0190', width='stretch'):
+                        if unified_mode:
+                            st.link_button('다른 계정으로 로그인',
+                                'https://projectagain.streamlit.app/pa-agent/auth/logout?next=switch',
+                                icon=':material/sync_alt:', use_container_width=True)
+                        elif st.button('다른 계정으로 로그인', icon=':material/sync_alt:',
+                                       type='tertiary', key='account_switch_v0190', width='stretch'):
                             _logout_from_settings(broker_requested=broker_requested, platform_issuer=platform_issuer,
                                                   auth_settings=auth_settings, token=token)
                     else:
-                        st.caption('계정 연결 전에는 대화가 이 브라우저에만 남아요.')
-                        st.link_button('ProjectAgain 회원가입', MARKETPLACE_BASE_URL, use_container_width=True)
-                    if st.button('⚙ 설정', key='open_settings_v0189', width='stretch'):
+                        st.caption('대화는 로그인 후 계정에 저장돼요.')
+                        st.link_button('회원가입', MARKETPLACE_BASE_URL,
+                                       icon=':material/person_add:', use_container_width=True)
+                    if st.button('설정', icon=':material/settings:', type='tertiary',
+                                 key='open_settings_v0189', width='stretch'):
                         show_settings_dialog(scope, current, active_archive, cloud_owner,
                                              actor, token, connected, broker_requested,
                                              platform_issuer, auth_settings, ai_identity)
-                    st.link_button('ProjectAgain 웹사이트', MARKETPLACE_BASE_URL, use_container_width=True)
-                    if connected and st.button('로그아웃', key='account_logout_v0190', width='stretch'):
-                        _logout_from_settings(broker_requested=broker_requested, platform_issuer=platform_issuer,
-                                              auth_settings=auth_settings, token=token)
+                    st.link_button('ProjectAgain 웹사이트', MARKETPLACE_BASE_URL,
+                                   icon=':material/open_in_new:', use_container_width=True)
+                    if connected:
+                        if unified_mode:
+                            st.link_button('로그아웃',
+                                'https://projectagain.streamlit.app/pa-agent/auth/logout',
+                                icon=':material/logout:', use_container_width=True)
+                        elif st.button('로그아웃', icon=':material/logout:', type='tertiary',
+                                       key='account_logout_v0190', width='stretch'):
+                            _logout_from_settings(broker_requested=broker_requested, platform_issuer=platform_issuer,
+                                                  auth_settings=auth_settings, token=token)
         uploaded = selected_zip_for_scope(scope, active_archive['active'])
 
 # ── Main: state-aware project workbench (results first; transcript on demand). ──

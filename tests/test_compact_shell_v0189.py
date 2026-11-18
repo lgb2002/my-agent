@@ -53,7 +53,7 @@ class CompactShellV0189(unittest.TestCase):
         self.assertIn("st.chat_input('예: 50만원 이하 Python 프로젝트를 추천해줘'",app)
         self.assertIn("key='sidebar_recent_v0189'",app)
         self.assertNotIn("with st.container(key='sidebar_shortcuts_v0189')",app)
-        self.assertIn("with st.popover('계정 · 설정 ▾'",app)
+        self.assertIn("with st.popover('내 계정'",app)
         self.assertIn('open_settings_v0189',app)
         self.assertIn('.st-key-sidebar_recent_v0189',css)
         self.assertIn('.st-key-welcome_actions',css)

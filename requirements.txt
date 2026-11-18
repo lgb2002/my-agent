@@ -1,6 +1,6 @@
 # ProjectAgain AI Agent v0.18.3 — Streamlit Cloud runtime dependencies
 # Direct dependencies for app.py, agent/, and core/ (Python 3.12)
-streamlit>=1.50,<2
+streamlit>=1.57,<2
 requests>=2.31,<3
 python-dotenv>=1.0,<2
 langchain>=1,<2

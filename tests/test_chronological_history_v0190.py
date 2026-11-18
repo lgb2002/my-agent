@@ -116,11 +116,11 @@ class StoredResultSafety(unittest.TestCase):
         self.assertIn('if session.get(\'pending\'):',app)
         self.assertIn('pending_ui(session, actor)',app)
         self.assertIn('현재 가격·거래 상태가 아닙니다.',app)
-        self.assertIn('계정 · 설정 ▾',app)
+        self.assertIn("with st.popover('내 계정'",app)
         self.assertNotIn("with st.container(key='sidebar_shortcuts_v0189')",app)
         self.assertIn('inline_zip_v0190',app)
         self.assertIn('다른 계정으로 로그인',app)
-        self.assertIn('ProjectAgain 회원가입',app)
+        self.assertIn("st.link_button('회원가입', MARKETPLACE_BASE_URL",app)
         self.assertIn('min-height:0;flex:1 1 auto',css)
         self.assertIn('st-key-conversation_history_v0174',css)
 

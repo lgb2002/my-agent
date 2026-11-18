@@ -1,0 +1,32 @@
+{
+  "scope": "static HTML/CSS fixture; not a real Streamlit or OAuth E2E",
+  "tested": [
+    {
+      "viewport": 390,
+      "document": 390,
+      "navHeight": 44,
+      "accountHeight": 44,
+      "footerTop": 760,
+      "footerBottom": 819,
+      "headerBottom": 48
+    },
+    {
+      "viewport": 768,
+      "document": 768,
+      "navHeight": 36,
+      "accountHeight": 39,
+      "footerTop": 765,
+      "footerBottom": 819,
+      "headerBottom": 48
+    },
+    {
+      "viewport": 1280,
+      "document": 1280,
+      "navHeight": 36,
+      "accountHeight": 39,
+      "footerTop": 765,
+      "footerBottom": 819,
+      "headerBottom": 48
+    }
+  ]
+}
