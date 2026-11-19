@@ -1,3 +1,5 @@
+> **v0.19.8 통합 로그인 장애 진단:** `docs/UNIFIED_LOGIN_DIAGNOSTICS_V0198.md` 참조. 기존 v0.19.7 동작과 인증 계약을 변경하지 않고 안전한 ASGI 오류 코드와 health 경로를 추가했습니다.
+
 ## v0.19.7 — 통합 로그인 전용 직접 콜백 경로 (2026-11-19)
 
 - v0.19.6에서 로그인 시작 경로는 해결됐지만 플랫폼 승인 후 기존 `https://projectagain.streamlit.app/?pa_broker_ticket=...` 복귀가 Community Cloud 외부 래퍼에서 무한 로딩되는 문제에 대응.

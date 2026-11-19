@@ -1,3 +1,11 @@
+## v0.19.8 — 통합 로그인 ASGI 진단 응답 (2026-11-19)
+
+- Community Cloud의 로그인 시작 HTTP 500이 Streamlit 스크립트 로그에 보이지 않아도, 로그인 시작 설정/서비스 구성/플랫폼 capabilities/DB/intent 단계별로 고정 오류 코드를 응답 본문에 표시.
+- 비밀번호, 요청 URL, 인증 티켓, 쿠키, 예외 원문, 연결 문자열은 진단 응답에 포함하지 않음. 303 리다이렉트와 HttpOnly/secure 쿠키 및 검증 로직은 그대로 유지.
+- 무상태 GET `/pa-agent/auth/health` 추가. 200 `PA-AUTH-ROUTE-OK`이면 ASGI 라우트 도달, 동일 500이면 Cloud 프록시 또는 앱 진입 구조 문제 가능성.
+- 콜백의 예상 외 예외 시에도 민감한 query를 URL에 남기지 않고 깨끗한 오류 화면으로 리다이렉트.
+- 모든 종전 API, 레거시 2단계 로그인, DB, 프론트엔드 기능 보존. 플랫폼 추가 변경이나 Secret 변경 불필요.
+
 ## v0.19.7 — 통합 로그인 전용 직접 콜백 경로 (2026-11-19)
 
 - v0.19.6에서 로그인 시작 경로는 해결됐지만 플랫폼 승인 후 기존 `https://projectagain.streamlit.app/?pa_broker_ticket=...` 복귀가 Community Cloud 외부 래퍼에서 무한 로딩되는 문제에 대응.
