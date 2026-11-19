@@ -176,7 +176,13 @@ async def login_logout(request):
 
 
 class BrokerReturnMiddleware:
-    """Intercept root callback BEFORE Streamlit, clearing ticket from browser URL."""
+    """Legacy root callback protection; unified return MUST use direct ASGI route.
+
+    The Community Cloud public / page is owned by the outer app wrapper.
+    This middleware cannot reliably intercept that wrapper's request. The
+    v0.37 unified callback instead uses /~/+/pa-agent/auth/callback, exposed
+    as a top-level document route by the platform's unified-only return URI.
+    """
     def __init__(self, app):
         self.app=app
 

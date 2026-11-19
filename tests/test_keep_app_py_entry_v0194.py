@@ -70,6 +70,7 @@ class StableEntrypointTests(unittest.TestCase):
         unified.BrokerReturnMiddleware = BrokerReturnMiddleware
         unified.login_start = lambda request: None
         unified.login_logout = lambda request: None
+        unified.process_callback = lambda request: None
         before = os.environ.get('AGENT_UNIFIED_ENTRY_READY')
         try:
             with patch.dict(sys.modules, {'streamlit': streamlit,
@@ -86,7 +87,7 @@ class StableEntrypointTests(unittest.TestCase):
                     self.assertIsInstance(app, FakeApp)
                     self.assertEqual(app.script_path, 'chat_ui.py')
                     self.assertEqual([r.path for r in app.routes],
-                                     ['/pa-agent/auth/start', '/pa-agent/auth/logout'])
+                                     ['/pa-agent/auth/start', '/pa-agent/auth/callback', '/pa-agent/auth/logout'])
                     self.assertTrue(all(r.methods == ['GET'] for r in app.routes))
                     self.assertIs(app.middleware[0].cls, BrokerReturnMiddleware)
                     self.assertEqual(os.environ['AGENT_UNIFIED_ENTRY_READY'], '1')

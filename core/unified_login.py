@@ -34,6 +34,7 @@ DEFAULT_AUDIENCE = 'projectagain-streamlit-broker'
 PUBLIC_APP_URL = 'https://projectagain.streamlit.app/'
 CLOUD_ASGI_BASE_URL = PUBLIC_APP_URL + '~/+/'
 UNIFIED_START_URL = CLOUD_ASGI_BASE_URL + 'pa-agent/auth/start'
+UNIFIED_CALLBACK_URL = CLOUD_ASGI_BASE_URL + 'pa-agent/auth/callback'
 UNIFIED_LOGOUT_URL = CLOUD_ASGI_BASE_URL + 'pa-agent/auth/logout'
 
 
@@ -72,6 +73,12 @@ class UnifiedClient(BrokerClient):
             data = response.json()
             if not isinstance(data, dict) or data.get('unified_login_enabled') is not True or data.get('flow') != 'BROKER_CONSENT_AND_SIGNED_IDENTITY':
                 raise BrokerError('unified_unavailable', '통합 로그인 설정이 아직 준비되지 않았어요.')
+            # Community Cloud's outer / URL is not the st.App HTTP server.
+            # Never start a browser-bound login that can only return to the
+            # outer wrapper and strand the one-time ticket there.
+            if data.get('unified_return_uri') != UNIFIED_CALLBACK_URL:
+                raise BrokerError('unified_callback_not_ready',
+                                  '플랫폼 통합 로그인 복귀 주소 설정이 아직 준비되지 않았어요.')
             return True
         except (requests.RequestException, ValueError):
             raise BrokerError('unified_unavailable', '플랫폼 인증 서버를 확인하지 못했어요.') from None

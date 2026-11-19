@@ -1,3 +1,10 @@
+## v0.19.7 — 통합 로그인 전용 직접 콜백 경로 (2026-11-19)
+
+- v0.19.6에서 로그인 시작 경로는 해결됐지만 플랫폼 승인 후 기존 `https://projectagain.streamlit.app/?pa_broker_ticket=...` 복귀가 Community Cloud 외부 래퍼에서 무한 로딩되는 문제에 대응.
+- `app.py`/`unified_entry.py`에 `GET /pa-agent/auth/callback` 라우트 추가. **플랫폼이 통합 로그인 flow에만** `https://projectagain.streamlit.app/~/+/pa-agent/auth/callback`을 사용하면 앱 서버가 최상위 문서 요청에서 안전하게 티켓을 교환하고, 토큰 없는 루트로 303 복귀.
+- 신규 통합 capabilities의 `unified_return_uri`가 정확히 일치하지 않으면 새 인증 시도를 시작하지 않는 fail-closed 검사 추가. 비밀키/토큰/브라우저 결속 및 legacy OIDC/Broker 변경 없음.
+- **플랫폼 측 후속 변경 필요**: `docs/PLATFORM_UNIFIED_RETURN_CALLBACK_V0197.md` 참조. Agent 버전만 배포하면 인증이 자동 해결되지 않으며, 운영 Cloud 통합 E2E 전까지 신규 인증 검증 완료로 간주하지 않음. 기존 2단계는 `AGENT_UNIFIED_LOGIN_ENABLED=false`로 복원 가능.
+
 ## v0.19.6 — Streamlit Cloud 통합 로그인 시작 URL 보완
 
 기존 앱을 삭제하지 않고 **Main file path `app.py`** 및 Streamlit Secrets를 그대로 유지합니다. 통합 로그인 버튼이 Streamlit 로딩 화면에 갇히던 경우를 줄이기 위해 통합 인증·로그아웃 링크를 `https://projectagain.streamlit.app/~/+/pa-agent/auth/...`로 변경했습니다. v0.37 인증·권한 정책은 바뀌지 않았습니다.
