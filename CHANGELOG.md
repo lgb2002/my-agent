@@ -1,3 +1,11 @@
+## v0.19.6 — Streamlit Cloud 통합 로그인 이동 경로 보완 (2026-11-19)
+
+- 실제 Streamlit Cloud에서 `https://projectagain.streamlit.app/pa-agent/auth/start`가 **바깥 Streamlit 로딩 페이지(200)**로 시작한 뒤, 안쪽 프레임의 ASGI 응답만 303으로 이동하면서 브라우저 주소창이 바뀌지 않는 현상 대응.
+- `st.link_button`의 통합 로그인 시작 URL을 `https://projectagain.streamlit.app/~/+/pa-agent/auth/start`로 변경. Community Cloud의 앱 서버 전달 접두 경로로 **직접 진입**하여 303이 내부 프레임이 아닌 브라우저 최상위 문서의 이동이 되도록 시도.
+- 동일한 경로 처리 문제를 막기 위해 통합 로그인 로그아웃·계정 전환 URL도 `~/+/pa-agent/auth/logout`을 사용. 브로커의 `login_start`, `login_logout`, Secure/HttpOnly/SameSite 쿠키, 일회용 티켓 검증 및 플랫폼 반환 주소는 변경하지 않음.
+- 플랫폼 OAuth v0.37 API, Replit 환경, 기존 OIDC/Broker 레거시, 대화/DB/사용자 설정·디자인·거래 승인 정책 그대로 유지. 신규 패키지·Secrets·DB 마이그레이션 없음.
+- Cloud 프록시의 `/~/+/` 경로는 호스팅 계층에서 관리하는 경로이므로 **로컬 단위 테스트로 실 Cloud 호환성을 보증할 수 없음**. 직접 이동 303, 플랫폼 로그인 페이지, 콜백에서 사용자별 인증 결속까지 운영 E2E가 필요. 실패 시 기존 `AGENT_UNIFIED_LOGIN_ENABLED=false`로 원복 가능.
+
 ## v0.19.5 — 로그인 전 사이드바 정리 및 로그인 CTA 대비 수정 (2026-11-19)
 
 - 로그인 전 사이드바에 반복 표시되던 대화 보존·계정 연결·공개 매물 설명 문구 제거. 인증 실패, 권한 부족, 동의 취소·만료에 대한 실제 경고는 유지.

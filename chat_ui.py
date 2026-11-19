@@ -32,7 +32,8 @@ from core.request_context import (set_request_context, set_broker_refresh_handle
 from core.oidc_session import resolve_login, revoke_access, _fetch_identity  # noqa: E402
 from core.oauth_broker import (BrokerStore,BrokerClient,BrokerError,BrokerReauth,
     _browser_identity,new_intent,resolve_broker,BROKER_SCOPE)  # noqa: E402
-from core.unified_login import (UnifiedStore, UnifiedClient, COOKIE_NAME, cookie_binding)  # noqa: E402
+from core.unified_login import (UnifiedStore, UnifiedClient, COOKIE_NAME, cookie_binding,
+                                UNIFIED_START_URL, UNIFIED_LOGOUT_URL)  # noqa: E402
 from core.marketplace_client import origin_only  # noqa: E402
 from core.ai_usage import set_ai_identity, usage_snapshot, storage_kind as ai_usage_storage_kind  # noqa: E402
 from core.llm_service import contains_obvious_secret  # noqa: E402
@@ -652,7 +653,7 @@ def unified_connect_ui(platform_origin):
     except (AttributeError, KeyError, TypeError):
         raw_cookie = ''
     binding = cookie_binding(raw_cookie)
-    start_link = 'https://projectagain.streamlit.app/pa-agent/auth/start'
+    start_link = UNIFIED_START_URL
     if not binding:
         with st.container(key='sidebar_login_action_v0195'):
             st.link_button('ProjectAgain으로 시작하기', start_link,
@@ -960,9 +961,9 @@ def show_settings_dialog(scope, current, active_archive, cloud_owner, actor,
         if connected:
             if unified_mode:
                 st.link_button('다른 계정으로 로그인',
-                    'https://projectagain.streamlit.app/pa-agent/auth/logout?next=switch')
+                    UNIFIED_LOGOUT_URL + '?next=switch')
                 st.link_button('로그아웃',
-                    'https://projectagain.streamlit.app/pa-agent/auth/logout')
+                    UNIFIED_LOGOUT_URL)
             else:
                 if st.button('다른 계정으로 로그인', key='settings_change_account_v0190'):
                     _logout_from_settings(broker_requested=broker_requested, platform_issuer=platform_issuer,
@@ -1263,7 +1264,7 @@ with st.sidebar:
                     if connected:
                         if unified_mode:
                             st.link_button('다른 계정으로 로그인',
-                                'https://projectagain.streamlit.app/pa-agent/auth/logout?next=switch',
+                                UNIFIED_LOGOUT_URL + '?next=switch',
                                 icon=':material/sync_alt:', use_container_width=True)
                         elif st.button('다른 계정으로 로그인', icon=':material/sync_alt:',
                                        type='tertiary', key='account_switch_v0190', width='stretch'):
@@ -1282,7 +1283,7 @@ with st.sidebar:
                     if connected:
                         if unified_mode:
                             st.link_button('로그아웃',
-                                'https://projectagain.streamlit.app/pa-agent/auth/logout',
+                                UNIFIED_LOGOUT_URL,
                                 icon=':material/logout:', use_container_width=True)
                         elif st.button('로그아웃', icon=':material/logout:', type='tertiary',
                                        key='account_logout_v0190', width='stretch'):

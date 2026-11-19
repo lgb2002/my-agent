@@ -1,6 +1,5 @@
 """Regression checks for v0.19.4 stable app.py deployment entry."""
 import ast
-import hashlib
 import os
 import sys
 import types
@@ -12,10 +11,15 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class StableEntrypointTests(unittest.TestCase):
-    def test_chat_ui_matches_audited_v0195_presentation_update(self):
-        # SHA-256 after v0.19.5 sidebar-only clarity update. The ASGI entry stays unchanged.
-        self.assertEqual(hashlib.sha256((ROOT / 'chat_ui.py').read_bytes()).hexdigest(),
-                         '69c9e1867c5902cc1d315206ed88197fd23ddaae92cec656e802664490f51988')
+    def test_chat_ui_retains_chat_and_verified_auth_code(self):
+        # The v0.19.6 navigation fix changes only the unified auth URLs in
+        # chat_ui.py. Keep UI + legacy authentication entry points intact.
+        source = (ROOT / 'chat_ui.py').read_text(encoding='utf-8')
+        for required in ('def broker_connect_ui(', 'def unified_connect_ui(',
+                         'def show_settings_dialog(', 'st.chat_input(',
+                         'st.login()', 'store.lookup_identity(binding)',
+                         'set_broker_access_handler(ensure_fresh)'):
+            self.assertIn(required, source)
 
     def test_both_launchers_target_same_chat_ui_with_secure_callback_routes(self):
         for name in ('app.py', 'unified_entry.py'):

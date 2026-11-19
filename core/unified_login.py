@@ -26,6 +26,16 @@ COOKIE_PATTERN = re.compile(r'^[A-Za-z0-9_-]{40,128}$')
 DEFAULT_ISSUER = 'https://projectagain.kr'
 DEFAULT_AUDIENCE = 'projectagain-streamlit-broker'
 
+# Community Cloud displays the app through an outer page and an inner app
+# frame. External OAuth navigation MUST begin as a top-level document request
+# to the app server, not through the outer page's iframe. /~/+/ is the
+# Community Cloud forwarding prefix (stripped before the st.App ASGI router).
+# Keep the registered platform callback on PUBLIC_APP_URL unchanged.
+PUBLIC_APP_URL = 'https://projectagain.streamlit.app/'
+CLOUD_ASGI_BASE_URL = PUBLIC_APP_URL + '~/+/'
+UNIFIED_START_URL = CLOUD_ASGI_BASE_URL + 'pa-agent/auth/start'
+UNIFIED_LOGOUT_URL = CLOUD_ASGI_BASE_URL + 'pa-agent/auth/logout'
+
 
 def token_hash(raw: str) -> str:
     return hashlib.sha256(raw.encode('utf-8')).hexdigest()

@@ -1,3 +1,11 @@
+## v0.19.6 — Streamlit Cloud 통합 로그인 시작 URL 보완
+
+기존 앱을 삭제하지 않고 **Main file path `app.py`** 및 Streamlit Secrets를 그대로 유지합니다. 통합 로그인 버튼이 Streamlit 로딩 화면에 갇히던 경우를 줄이기 위해 통합 인증·로그아웃 링크를 `https://projectagain.streamlit.app/~/+/pa-agent/auth/...`로 변경했습니다. v0.37 인증·권한 정책은 바뀌지 않았습니다.
+
+- 배포: GitHub `my-agent`에 전체 소스를 반영한 뒤 Streamlit 앱 재시작.
+- 운영 검증: `ProjectAgain으로 시작하기` 클릭 후 Network → **Document**에서 첫 `start` 요청이 `303`인지 확인(기존에는 `200` 바깥 페이지 이후 별도 프레임에서만 `303`). 플랫폼 `projectagain.kr/login`로 브라우저 주소창이 바뀌고 로그인·동의 후 앱으로 복귀해야 성공입니다.
+- 통합 로그인 완료 전에는 `Streamlit Cloud E2E 미검증` 상태로 취급합니다. 문제가 있으면 `AGENT_UNIFIED_LOGIN_ENABLED = false`로 재시작해 정상 동작하던 기존 OIDC+Broker 연결을 이용할 수 있습니다. 비밀키·DB 변경 금지.
+
 ## v0.19.5 — 로그인 전 사이드바 가독성 수정
 
 비로그인 사이드바의 불필요한 안내 문구를 제거하고, 기본 OIDC 로그인과 신규 통합 로그인 모두에 선명한 진녹색 버튼을 적용했습니다. 기능·인증 정책·저장 구조는 바뀌지 않았습니다. 기존 Streamlit Cloud Main file path는 계속 `app.py`이며 GitHub 반영 후 기존 앱만 재시작하면 됩니다. `AGENT_UNIFIED_LOGIN_ENABLED` 설정에 따라 기존 로그인 또는 통합 로그인이 표시됩니다.

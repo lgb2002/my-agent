@@ -13,7 +13,7 @@ from urllib.parse import parse_qs
 
 from core.oauth_broker import BrokerError
 from core.unified_login import (UnifiedClient, UnifiedStore, COOKIE_NAME,
-                                COOKIE_MAX_AGE, cookie_binding)
+                                COOKIE_MAX_AGE, cookie_binding, UNIFIED_START_URL)
 
 PUBLIC_APP_URL = 'https://projectagain.streamlit.app/'
 CALLBACK_KEYS = ('pa_broker_ticket', 'pa_broker_state', 'pa_broker_error')
@@ -167,7 +167,7 @@ async def login_logout(request):
     if next_step == 'switch':
         redirect = 'https://projectagain.kr/auth/logout'
     elif next_step == 'start':
-        redirect = 'https://projectagain.streamlit.app/pa-agent/auth/start'
+        redirect = UNIFIED_START_URL
     else:
         redirect = PUBLIC_APP_URL
     response=RedirectResponse(redirect,status_code=303)
