@@ -11,12 +11,13 @@ import streamlit as st
 from starlette.middleware import Middleware
 from starlette.routing import Route
 
-from core.unified_web import BrokerReturnMiddleware, login_start, login_logout, process_callback
+from core.unified_web import BrokerReturnMiddleware, login_start, login_logout, process_callback, login_route_health
 
 os.environ['AGENT_UNIFIED_ENTRY_READY'] = '1'
 
 app = st.App('chat_ui.py', routes=[
     Route('/pa-agent/auth/start', login_start, methods=['GET']),
+    Route('/pa-agent/auth/health', login_route_health, methods=['GET']),
     Route('/pa-agent/auth/callback', process_callback, methods=['GET']),
     Route('/pa-agent/auth/logout', login_logout, methods=['GET']),
 ], middleware=[Middleware(BrokerReturnMiddleware)])
