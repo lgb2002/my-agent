@@ -1,3 +1,7 @@
+## v0.19.5 — 로그인 전 사이드바 가독성 수정
+
+비로그인 사이드바의 불필요한 안내 문구를 제거하고, 기본 OIDC 로그인과 신규 통합 로그인 모두에 선명한 진녹색 버튼을 적용했습니다. 기능·인증 정책·저장 구조는 바뀌지 않았습니다. 기존 Streamlit Cloud Main file path는 계속 `app.py`이며 GitHub 반영 후 기존 앱만 재시작하면 됩니다. `AGENT_UNIFIED_LOGIN_ENABLED` 설정에 따라 기존 로그인 또는 통합 로그인이 표시됩니다.
+
 # ProjectAgain Agent v0.19.4 — 기존 app.py 주소 유지 · 단일 로그인 배포 진입점
 
 **Main file path는 계속 `app.py`입니다.** 앱 삭제, 새 앱 생성, Cloud URL 변경, Secrets 재등록은 필요하지 않습니다.

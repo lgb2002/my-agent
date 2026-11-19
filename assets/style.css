@@ -770,3 +770,38 @@ html,body,[data-testid="stApp"] {
     height:42px !important;min-height:42px !important;max-height:42px !important;
   }
 }
+
+
+/* v0.19.5 — high-contrast login-only action, never style all sidebar buttons.
+   Earlier sidebar footer rules made primary button backgrounds transparent
+   while leaving primary white text. Covers native OIDC/Broker st.button and
+   the unified-login st.link_button without touching account menu actions. */
+[data-testid="stSidebar"] .st-key-sidebar_account_panel_v0188 .st-key-sidebar_login_action_v0195 [data-testid="stButton"] button,
+[data-testid="stSidebar"] .st-key-sidebar_account_panel_v0188 .st-key-sidebar_login_action_v0195 [data-testid="stLinkButton"] a {
+  display:flex;align-items:center;justify-content:center;
+  width:100%;min-height:39px !important;
+  color:#FFFFFF !important;
+  background:#295447 !important;
+  border:1px solid #295447 !important;
+  border-radius:8px !important;
+  font-size:.85rem !important;font-weight:700 !important;
+  line-height:1.25 !important;text-align:center;
+  text-decoration:none !important;
+  opacity:1 !important;
+  box-shadow:none !important;
+}
+[data-testid="stSidebar"] .st-key-sidebar_account_panel_v0188 .st-key-sidebar_login_action_v0195 [data-testid="stButton"] button:hover,
+[data-testid="stSidebar"] .st-key-sidebar_account_panel_v0188 .st-key-sidebar_login_action_v0195 [data-testid="stLinkButton"] a:hover {
+  background:#1E4035 !important;border-color:#1E4035 !important;
+  color:#FFFFFF !important;
+}
+[data-testid="stSidebar"] .st-key-sidebar_login_action_v0195 button:focus-visible,
+[data-testid="stSidebar"] .st-key-sidebar_login_action_v0195 a:focus-visible {
+  outline:2px solid #658B76 !important;outline-offset:3px;
+}
+@media (max-width:760px) {
+  [data-testid="stSidebar"] .st-key-sidebar_account_panel_v0188 .st-key-sidebar_login_action_v0195 [data-testid="stButton"] button,
+  [data-testid="stSidebar"] .st-key-sidebar_account_panel_v0188 .st-key-sidebar_login_action_v0195 [data-testid="stLinkButton"] a {
+    min-height:44px !important;
+  }
+}

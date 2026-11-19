@@ -12,10 +12,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class StableEntrypointTests(unittest.TestCase):
-    def test_previous_chat_application_preserved_byte_for_byte(self):
-        # SHA-256 of v0.19.3 app.py (all chat UI, existing auth, tools, design).
+    def test_chat_ui_matches_audited_v0195_presentation_update(self):
+        # SHA-256 after v0.19.5 sidebar-only clarity update. The ASGI entry stays unchanged.
         self.assertEqual(hashlib.sha256((ROOT / 'chat_ui.py').read_bytes()).hexdigest(),
-                         'da92f69e153f79ebf5c356d055ffc99df517a97521afa2b87221f31b37341763')
+                         '69c9e1867c5902cc1d315206ed88197fd23ddaae92cec656e802664490f51988')
 
     def test_both_launchers_target_same_chat_ui_with_secure_callback_routes(self):
         for name in ('app.py', 'unified_entry.py'):

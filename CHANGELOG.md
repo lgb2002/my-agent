@@ -1,3 +1,9 @@
+## v0.19.5 — 로그인 전 사이드바 정리 및 로그인 CTA 대비 수정 (2026-11-19)
+
+- 로그인 전 사이드바에 반복 표시되던 대화 보존·계정 연결·공개 매물 설명 문구 제거. 인증 실패, 권한 부족, 동의 취소·만료에 대한 실제 경고는 유지.
+- 기존 OIDC/Broker `st.button` 및 v0.37 통합 로그인 `st.link_button`을 동일한 키드 컨테이너로 감싸고 CSS를 로그인 버튼에만 한정하여 지정. 누적 사이드바 CSS의 투명 배경과 흰 글자 충돌 수정; 데스크톱 선명한 딥그린 39px CTA, 모바일 최소 44px, 호버·키보드 포커스 지원.
+- OAuth 보안·API·대화 저장·Supabase DB·사용자 설정·실제 거래 승인 정책과 `app.py` ASGI 진입점 변경 없음. Streamlit Secrets 및 Replit 플랫폼 재배포 불필요. 실 Cloud 렌더링은 배포 후 확인.
+
 ## v0.19.4 — Streamlit 기존 app.py 진입점 유지 (2026-11-18)
 
 - `app.py`를 ASGI `st.App` 진입점으로 변경. `chat_ui.py`로 이전 v0.19.3 UI 소스 100% 이동, `unified_entry.py` 호환 유지.

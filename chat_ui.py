@@ -529,9 +529,10 @@ def broker_connect_ui(platform_origin, native_configured):
         st.warning('통합 로그인 설정이 필요해요. 공개 매물은 로그인 없이 볼 수 있어요.')
         return None, None
     if not bool(getattr(st.user,'is_logged_in',False)):
-        st.caption('ProjectAgain 로그인 후 필요한 권한을 안전하게 연결할 수 있어요.')
-        if st.button('ProjectAgain 계정으로 로그인',key='broker_native_login',type='primary',width='stretch'):
-            st.login()
+        with st.container(key='sidebar_login_action_v0195'):
+            if st.button('ProjectAgain 계정으로 로그인', key='broker_native_login',
+                         type='primary', width='stretch'):
+                st.login()
         return None,None
     try:
         db_url=os.environ.get('AGENT_STATE_DATABASE_URL','')
@@ -610,7 +611,6 @@ def broker_connect_ui(platform_origin, native_configured):
                 return None
         return login,refresh_one_get
 
-    st.caption('ProjectAgain 계정 확인됨 · API 이용 권한을 연결해 주세요.')
     # Avoid a second failing DB connection on every rerun when the store is down.
     if not storage_diagnosis_needed:
         try:
@@ -622,7 +622,6 @@ def broker_connect_ui(platform_origin, native_configured):
                 st.session_state['broker_authorization_binding']=binding
                 st.session_state['broker_authorization_created']=time.time()
             st.link_button('ProjectAgain 작업 권한 연결',auth_url,type='primary',width='stretch')
-            st.caption('첫 연결 시 플랫폼에서 권한 동의가 필요해요.')
         except BrokerError as exc:
             st.warning('권한 연결을 준비하지 못했어요. 연결 설정과 플랫폼 상태를 확인해 주세요.')
             storage_diagnosis_needed = exc.code == 'storage_unavailable'
@@ -655,7 +654,9 @@ def unified_connect_ui(platform_origin):
     binding = cookie_binding(raw_cookie)
     start_link = 'https://projectagain.streamlit.app/pa-agent/auth/start'
     if not binding:
-        st.link_button('ProjectAgain으로 시작하기', start_link, type='primary', width='stretch')
+        with st.container(key='sidebar_login_action_v0195'):
+            st.link_button('ProjectAgain으로 시작하기', start_link,
+                           type='primary', width='stretch')
         return None, None
 
     try:
@@ -711,8 +712,9 @@ def unified_connect_ui(platform_origin):
                 time.time()-float(st.session_state.get('unified_draft_created',0))<240):
                 st.link_button('추가 권한 동의 열기',st.session_state['unified_draft_url'])
         return login,refresh_one_get
-    st.caption('ProjectAgain 계정 연결이 필요해요.')
-    st.link_button('ProjectAgain으로 시작하기', start_link, type='primary', width='stretch')
+    with st.container(key='sidebar_login_action_v0195'):
+        st.link_button('ProjectAgain으로 시작하기', start_link,
+                       type='primary', width='stretch')
     return None,None
 
 # ── Secondary controls live in a real Streamlit modal; they are not a wall of
@@ -1059,10 +1061,10 @@ with st.sidebar:
                     if st.button('로그인 다시 시작', key='oidc_invalid_v018', width='stretch'):
                         st.logout()
                 else:
-                    st.caption('공개 매물 조회는 로그인 없이 사용할 수 있어요.')
-                    if st.button('ProjectAgain 계정으로 로그인', key='oidc_login_v018',
-                                 type='primary', width='stretch'):
-                        st.login()
+                    with st.container(key='sidebar_login_action_v0195'):
+                        if st.button('ProjectAgain 계정으로 로그인', key='oidc_login_v018',
+                                     type='primary', width='stretch'):
+                            st.login()
         # AI quota details moved into Settings. Login and scope warnings stay visible.
     st.session_state.setdefault('recent_stage_times_v0191', {})['auth'] = round(
         time.perf_counter() - auth_started_v0191, 3)
@@ -1238,8 +1240,6 @@ with st.sidebar:
                             if st.button('취소', key='chat_cancel_delete_v0187_' + cid, width='stretch'):
                                 st.session_state['chat_actions_open_v0187'] = None
                                 st.rerun()
-        if not cloud_owner:
-            st.caption('로그인 전 대화는 이 브라우저에서만 유지돼요.')
         # Session-safe consent key: hidden dialog widgets cannot be the sole
         # source of state because Streamlit deletes widget keys when not shown.
         old_consent_key = 'remember_workflow_v014_' + scope[-12:]
@@ -1270,7 +1270,6 @@ with st.sidebar:
                             _logout_from_settings(broker_requested=broker_requested, platform_issuer=platform_issuer,
                                                   auth_settings=auth_settings, token=token)
                     else:
-                        st.caption('대화는 로그인 후 계정에 저장돼요.')
                         st.link_button('회원가입', MARKETPLACE_BASE_URL,
                                        icon=':material/person_add:', use_container_width=True)
                     if st.button('설정', icon=':material/settings:', type='tertiary',
